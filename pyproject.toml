@@ -1,0 +1,29 @@
+[project]
+name = "codex-search"
+version = "0.1.0"
+description = "Codex-first multi-source search and content extraction framework"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "requests>=2.31.0",
+  "PyYAML>=6.0.0"
+]
+
+[project.optional-dependencies]
+mcp = [
+  "mcp>=1.6.0; python_version >= '3.10'"
+]
+
+[project.scripts]
+codex-search = "codex_search_stack.cli:main"
+codex-search-mcp = "codex_search_stack.mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

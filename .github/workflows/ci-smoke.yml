@@ -1,0 +1,46 @@
+name: ci-smoke
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      TAVILY_API_URL: ${{ secrets.TAVILY_API_URL }}
+      GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+      GROK_API_URL: ${{ secrets.GROK_API_URL }}
+      GROK_MODEL: ${{ secrets.GROK_MODEL }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MINERU_TOKEN: ${{ secrets.MINERU_TOKEN }}
+      CONFIDENCE_PROFILE: deep
+      CI_SMOKE_MODE: auto
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run CI smoke hook
+        run: ./scripts/ci_smoke_hook.sh
+
+      - name: Upload smoke reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-smoke-reports
+          path: .runtime/ci-reports

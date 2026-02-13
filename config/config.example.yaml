@@ -1,0 +1,58 @@
+search:
+  exa:
+    api_key: ""
+  grok:
+    api_url: "https://api.x.ai/v1"
+    api_key: ""
+    model: "grok-4.1"
+  tavily:
+    api_url: "https://api.tavily.com"
+    api_key: ""
+  key_pool:
+    enabled: true
+    file: "~/.codex/key-pool/pool.csv"
+
+extract:
+  mineru:
+    token: ""
+    token_file: "~/.codex/secrets/mineru_key.txt"
+    api_base: "https://mineru.net"
+    wrapper_path: ""
+    workspace: "./.runtime/codex-workspace"
+
+explore:
+  github_token: ""
+
+runtime:
+  confidence_profile: "deep"
+  search_timeout_seconds: 30
+  extract_timeout_seconds: 30
+
+policy:
+  models:
+    grok:
+      default: "grok-4.1"
+      profiles:
+        cheap: "grok-4.1-fast"
+        balanced: "grok-4.1"
+        strong: "grok-4.1-thinking"
+  routing:
+    by_mode:
+      fast: ["exa", "grok"]
+      deep: ["exa", "tavily", "grok"]
+      answer: ["tavily"]
+  extract:
+    default_strategy: "auto"
+    anti_bot_domains:
+      - "zhuanlan.zhihu.com"
+      - "www.zhihu.com"
+      - "zhihu.com"
+      - "mp.weixin.qq.com"
+      - "www.xiaohongshu.com"
+      - "xiaohongshu.com"
+
+observability:
+  decision_trace:
+    enabled: true
+    persist: true
+    path: "./.runtime/decision-trace/decision_trace.jsonl"
