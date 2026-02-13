@@ -396,6 +396,18 @@ A：MCP 单查询入口不支持 comparison 多查询流程；请改用 skill `s
 
 ---
 
+## 致谢与参考
+
+感谢以下开源项目提供的灵感与方法参考：
+
+- [blessonism/github-explorer-skill](https://github.com/blessonism/github-explorer-skill)  
+  提供了 GitHub 项目调研流程与结构化报告思路参考。
+
+- [GuDaStudio/GrokSearch](https://github.com/GuDaStudio/GrokSearch)  
+  提供了 Grok 搜索能力接入与工具化设计思路参考。
+
+---
+
 ## 文档导航
 
 - `skills/README.md`
