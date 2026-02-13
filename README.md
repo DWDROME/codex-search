@@ -391,7 +391,7 @@ A：`strategy=auto` 下命中高阻域名会自动路由 `mineru_only`，这是�
 **Q3：如何验证 MCP 是否真的可用？**  
 A：先 `codex mcp get "codex-search"`，再调用 `get_config_info`、`search`、`extract`、`explore` 逐项 smoke。
 
-**Q4：为什么 comparison 在 MCP 报参数错误？**  
+**asdfadsfsdaQ4：为什么 comparison 在 MCP 报参数错误？**  
 A：MCP 单查询入口不支持 comparison 多查询流程；请改用 skill `search.py --queries ...`。
 
 ---
