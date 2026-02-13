@@ -9,6 +9,15 @@ export PYTHONPATH="$ROOT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_WORKSPACE="${CODEX_WORKSPACE:-$ROOT_DIR/.runtime/codex-workspace}"
 export MINERU_WORKSPACE="${MINERU_WORKSPACE:-$CODEX_WORKSPACE}"
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "[FAIL] uv 未安装，请先安装 uv 后再执行。"
+  exit 1
+fi
+
+run_uv() {
+  (cd "$ROOT_DIR" && uv run "$@")
+}
+
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
@@ -20,7 +29,7 @@ fi
 
 if [ -z "${MINERU_TOKEN:-}" ]; then
   MINERU_TOKEN_FROM_CONFIG="$(
-    python3 - "$CONFIG_FILE" <<'PY'
+    run_uv python - "$CONFIG_FILE" <<'PY'
 import sys
 from pathlib import Path
 
@@ -61,7 +70,7 @@ run_json_step() {
 
   echo "[RUN] $name"
   if "$@" >"$out_file" 2>"$err_file"; then
-    if python3 - "$name" "$out_file" <<'PY'
+    if run_uv python - "$name" "$out_file" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -106,20 +115,20 @@ PY
 
 run_json_step \
   "search-layer" \
-  python3 "$ROOT_DIR/skills/search-layer/scripts/search.py" "OpenAI Codex 最新更新" --mode deep --intent status --freshness pw --num 2
+  run_uv python "$ROOT_DIR/skills/search-layer/scripts/search.py" "OpenAI Codex 最新更新" --mode deep --intent status --freshness pw --num 2
 
 run_json_step \
   "content-extract" \
-  python3 "$ROOT_DIR/skills/content-extract/scripts/content_extract.py" --url "https://platform.openai.com/docs/guides/tools-web-search" --max-chars 800
+  run_uv python "$ROOT_DIR/skills/content-extract/scripts/content_extract.py" --url "https://platform.openai.com/docs/guides/tools-web-search" --max-chars 800
 
 run_json_step \
   "github-explorer" \
-  python3 "$ROOT_DIR/skills/github-explorer/scripts/explore.py" "openai/codex" --format json --no-extract --issues 5 --commits 5 --external-num 3
+  run_uv python "$ROOT_DIR/skills/github-explorer/scripts/explore.py" "openai/codex" --format json --no-extract --issues 5 --commits 5 --external-num 3
 
 if [ -n "${MINERU_TOKEN:-}" ]; then
   run_json_step \
     "mineru-extract" \
-    python3 "$ROOT_DIR/skills/mineru-extract/scripts/mineru_parse_documents.py" --file-sources "https://zhuanlan.zhihu.com/p/619438846" --model-version MinerU-HTML --emit-markdown --max-chars 800
+    run_uv python "$ROOT_DIR/skills/mineru-extract/scripts/mineru_parse_documents.py" --file-sources "https://zhuanlan.zhihu.com/p/619438846" --model-version MinerU-HTML --emit-markdown --max-chars 800
 else
   echo "[SKIP] mineru-extract (MINERU_TOKEN is empty)"
   SKIP_COUNT=$((SKIP_COUNT + 1))

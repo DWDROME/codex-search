@@ -8,8 +8,13 @@ LOG_PATH="$ROOT_DIR/.runtime/refresh_egg_info.log"
 
 mkdir -p "$PREFIX_DIR" "$CACHE_DIR" "$ROOT_DIR/.runtime"
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "[FAIL] uv 未安装，请先安装 uv 后再执行。"
+  exit 1
+fi
+
 echo "[RUN] refresh egg-info metadata from README.md"
-python3 -m pip install \
+uv run python -m pip install \
   --ignore-installed \
   --no-deps \
   --editable "$ROOT_DIR" \

@@ -65,7 +65,7 @@
 ### Step 0. 前置准备
 
 - Python `3.9+`
-- 推荐安装 `uvx`（用于 MCP 启动）
+- 推荐安装 `uv`（用于 Skills/CLI/MCP 统一启动）
 - 已有 Codex 运行环境
 
 ### Step 1. 初始化配置
@@ -117,7 +117,7 @@ CODEX_SEARCH_CONFIG = "/path/to/codex-search/config/config.yaml"
 ### Step 4. 验证安装与配置
 
 ```bash
-python3 "scripts/check_api_config.py"
+uv run python "scripts/check_api_config.py"
 bash "scripts/skill_smoke_check.sh"
 ```
 
@@ -202,14 +202,14 @@ search / extract / explore / get_config_info
 ### 1) 多源搜索（时效问题）
 
 ```bash
-python3 "skills/search-layer/scripts/search.py" "OpenAI Codex 最新更新" \
+uv run python "skills/search-layer/scripts/search.py" "OpenAI Codex 最新更新" \
   --mode deep --intent status --freshness pw --num 5
 ```
 
 ### 2) 对比搜索（并行子查询）
 
 ```bash
-python3 "skills/search-layer/scripts/search.py" \
+uv run python "skills/search-layer/scripts/search.py" \
   --queries "Bun vs Deno" "Bun 优势" "Deno 优势" \
   --mode deep --intent comparison --num 5
 ```
@@ -217,21 +217,21 @@ python3 "skills/search-layer/scripts/search.py" \
 ### 3) 普通网页提取
 
 ```bash
-python3 "skills/content-extract/scripts/content_extract.py" \
+uv run python "skills/content-extract/scripts/content_extract.py" \
   --url "https://platform.openai.com/docs/guides/tools-web-search" --max-chars 3000
 ```
 
 ### 4) 反爬网页提取（知乎示例）
 
 ```bash
-python3 "skills/content-extract/scripts/content_extract.py" \
+uv run python "skills/content-extract/scripts/content_extract.py" \
   --url "https://zhuanlan.zhihu.com/p/619438846" --max-chars 3000
 ```
 
 ### 5) GitHub 项目尽调
 
 ```bash
-python3 "skills/github-explorer/scripts/explore.py" "openai/codex" \
+uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
   --issues 8 --commits 8 --external-num 10 --extract-top 3 --format markdown
 ```
 
@@ -383,7 +383,7 @@ src/codex_search_stack/
 ## 常见问题
 
 **Q1：为什么 `search` 返回空结果？**  
-A：先跑 `python3 "scripts/check_api_config.py"`；重点看 `search` readiness 和结果中的 `notes`。
+A：先跑 `uv run python "scripts/check_api_config.py"`；重点看 `search` readiness 和结果中的 `notes`。
 
 **Q2：知乎链接为什么不是 Tavily 抽取？**  
 A：`strategy=auto` 下命中高阻域名会自动路由 `mineru_only`，这是预期行为。

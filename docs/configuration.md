@@ -69,11 +69,11 @@ policy:
 聚合统计（失败率/延迟/命中源）：
 
 ```bash
-python3 "./scripts/decision_trace_stats.py" --limit 5000
+uv run python "./scripts/decision_trace_stats.py" --limit 5000
 ```
 
 ## 体检命令
 
 ```bash
-python3 "./scripts/check_api_config.py"
+uv run python "./scripts/check_api_config.py"
 ```

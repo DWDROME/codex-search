@@ -2,8 +2,8 @@
 
 ## 服务入口
 
-- 模块：`python3 -m codex_search_stack.mcp_server`
-- 脚本：`codex-search-mcp`
+- 模块：`uv run --extra mcp python -m codex_search_stack.mcp_server`
+- 脚本：`uv run --extra mcp codex-search-mcp`
 - 依赖：`mcp>=1.6.0`（建议 Python 3.10+）
 
 ## Codex 配置示例
@@ -64,12 +64,12 @@ CODEX_SEARCH_CONFIG = "/path/to/codex-search/config/config.yaml"
 
 ## 验证步骤
 
-1. 启动服务：`codex-search-mcp`
+1. 启动服务：`uv run --extra mcp codex-search-mcp`
 2. 在 Codex 中调用 `get_config_info`
 3. 分别调用 `search/extract/explore` 做 smoke 验证
 
 ## 端到端回归（MCP）
 
 ```bash
-python3 -m unittest tests.test_mcp_server
+uv run python -m unittest tests.test_mcp_server
 ```

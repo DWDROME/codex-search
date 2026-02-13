@@ -34,7 +34,7 @@ description: >
 ## 命令模板
 
 ```bash
-python3 "skills/mineru-extract/scripts/mineru_parse_documents.py" \
+uv run python "skills/mineru-extract/scripts/mineru_parse_documents.py" \
   --file-sources "https://zhuanlan.zhihu.com/p/619438846" \
   --model-version MinerU-HTML \
   --emit-markdown --max-chars 20000
@@ -43,7 +43,7 @@ python3 "skills/mineru-extract/scripts/mineru_parse_documents.py" \
 多 URL：
 
 ```bash
-python3 "skills/mineru-extract/scripts/mineru_parse_documents.py" \
+uv run python "skills/mineru-extract/scripts/mineru_parse_documents.py" \
   --file-sources "<url1>\n<url2>" --model-version MinerU-HTML
 ```
 

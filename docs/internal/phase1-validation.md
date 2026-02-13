@@ -5,8 +5,8 @@
 Commands:
 
 ```bash
-python3 -m compileall "other/codex-search/src"
-PYTHONPATH="other/codex-search/src" python3 -m codex_search_stack.cli --help
+uv run python -m compileall "other/codex-search/src"
+PYTHONPATH="other/codex-search/src" uv run python -m codex_search_stack.cli --help
 ```
 
 Result:
@@ -20,10 +20,10 @@ Commands:
 
 ```bash
 PYTHONPATH="/path/to/codex-search/src" \
-python3 -m codex_search_stack.cli search "号池 高级实现 例子" --mode deep --num 3
+uv run python -m codex_search_stack.cli search "号池 高级实现 例子" --mode deep --num 3
 
 PYTHONPATH="/path/to/codex-search/src" \
-python3 -m codex_search_stack.cli extract "https://en.wikipedia.org/wiki/Web_scraping"
+uv run python -m codex_search_stack.cli extract "https://en.wikipedia.org/wiki/Web_scraping"
 ```
 
 Observed:

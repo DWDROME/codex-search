@@ -40,8 +40,8 @@
 - File: `.github/workflows/ci-smoke.yml`
 - Steps:
   1. checkout
-  2. setup python 3.9
-  3. `pip install -e .`
+  2. setup uv（Python 3.11）
+  3. `uv sync --all-extras`
   4. run `./scripts/ci_smoke_hook.sh`
   5. upload `.runtime/ci-reports` artifact
 
