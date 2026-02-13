@@ -25,14 +25,14 @@ Port legacy `github-explorer` orchestration into Codex runtime while reusing:
 
 ```bash
 PYTHONPATH="other/codex-search/src" \
-python3 -m codex_search_stack.cli explore "microsoft/graphrag" --format markdown
+uv run python -m codex_search_stack.cli explore "microsoft/graphrag" --format markdown
 ```
 
 Optional:
 
 ```bash
 PYTHONPATH="other/codex-search/src" \
-python3 -m codex_search_stack.cli explore "langchain-ai/langchain" \
+uv run python -m codex_search_stack.cli explore "langchain-ai/langchain" \
   --issues 5 --commits 5 --external-num 8 --extract-top 2 --format json
 ```
 

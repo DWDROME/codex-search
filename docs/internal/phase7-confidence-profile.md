@@ -60,8 +60,8 @@ Returned payload now includes:
 ## Validation commands
 
 ```bash
-python3 -m compileall "/path/to/codex-search/src"
+uv run python -m compileall "/path/to/codex-search/src"
 PYTHONPATH="/path/to/codex-search/src" \
-python3 -m codex_search_stack.cli explore "microsoft/graphrag" --confidence-profile quick --format json
+uv run python -m codex_search_stack.cli explore "microsoft/graphrag" --confidence-profile quick --format json
 ./scripts/smoke_phase6.sh
 ```

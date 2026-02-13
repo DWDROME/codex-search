@@ -7,7 +7,7 @@
 ## 运行方式
 
 ```bash
-python3 -m unittest discover -s "tests" -v
+uv run python -m unittest discover -s "tests" -v
 ```
 
 ## 当前覆盖

@@ -14,17 +14,26 @@ export PYTHONPATH="$ROOT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export CODEX_WORKSPACE="${CODEX_WORKSPACE:-$ROOT_DIR/.runtime/codex-workspace}"
 export MINERU_WORKSPACE="${MINERU_WORKSPACE:-$CODEX_WORKSPACE}"
 
-python3 "$ROOT_DIR/scripts/masked_env_snapshot.py" >"$SNAPSHOT_FILE"
+if ! command -v uv >/dev/null 2>&1; then
+  echo "[FAIL] uv 未安装，请先安装 uv 后再执行。"
+  exit 1
+fi
+
+run_uv() {
+  (cd "$ROOT_DIR" && uv run "$@")
+}
+
+run_uv python "$ROOT_DIR/scripts/masked_env_snapshot.py" >"$SNAPSHOT_FILE"
 echo "[info] masked env snapshot => $SNAPSHOT_FILE"
 
-python3 "$ROOT_DIR/scripts/check_api_config.py" --json >"$CONFIG_CHECK_FILE"
+run_uv python "$ROOT_DIR/scripts/check_api_config.py" --json >"$CONFIG_CHECK_FILE"
 echo "[info] api config check => $CONFIG_CHECK_FILE"
 
 MODE="${CI_SMOKE_MODE:-auto}"
 MODE="$(echo "$MODE" | tr '[:upper:]' '[:lower:]')"
 
 read -r HAS_SEARCH_KEY HAS_EXTRACT_KEY <<EOF
-$(python3 - "$CONFIG_CHECK_FILE" <<'PY'
+$(run_uv python - "$CONFIG_CHECK_FILE" <<'PY'
 import json
 import sys
 
@@ -67,7 +76,7 @@ fi
 
 echo "[run] offline smoke (compile + cli help)"
 {
-  python3 -m compileall "$ROOT_DIR/src"
-  python3 -m codex_search_stack.cli --help >/dev/null
+  run_uv python -m compileall "$ROOT_DIR/src"
+  run_uv python -m codex_search_stack.cli --help >/dev/null
   echo "offline smoke passed"
 } 2>&1 | tee "$LOG_FILE"

@@ -37,14 +37,14 @@ description: >
 默认策略（推荐）：
 
 ```bash
-python3 "skills/content-extract/scripts/content_extract.py" \
+uv run python "skills/content-extract/scripts/content_extract.py" \
   --url "<url>" --max-chars 5000
 ```
 
 强制 MinerU：
 
 ```bash
-python3 "skills/content-extract/scripts/content_extract.py" \
+uv run python "skills/content-extract/scripts/content_extract.py" \
   --url "<url>" --force-mineru
 ```
 

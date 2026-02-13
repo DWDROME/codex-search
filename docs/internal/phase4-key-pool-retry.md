@@ -24,12 +24,12 @@ Embed Grok/Tavily key-pool behavior into Python runtime so CLI commands can auto
 
 ```bash
 PYTHONPATH="other/codex-search/src" \
-python3 -m codex_search_stack.cli search "grok tavily key pool retry" --mode deep --num 3
+uv run python -m codex_search_stack.cli search "grok tavily key pool retry" --mode deep --num 3
 ```
 
 ```bash
 PYTHONPATH="other/codex-search/src" \
-python3 -m codex_search_stack.cli explore "microsoft/graphrag" --format json
+uv run python -m codex_search_stack.cli explore "microsoft/graphrag" --format json
 ```
 
 ## Notes

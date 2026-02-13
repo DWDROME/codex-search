@@ -48,7 +48,7 @@ description: >
 对比类与探索类建议拆成 2-3 个子查询并行：
 
 ```bash
-python3 "skills/search-layer/scripts/search.py" \
+uv run python "skills/search-layer/scripts/search.py" \
   --queries "A vs B" "A 优势" "B 优势" \
   --mode deep --intent comparison --num 5
 ```
@@ -58,14 +58,14 @@ python3 "skills/search-layer/scripts/search.py" \
 单查询：
 
 ```bash
-python3 "skills/search-layer/scripts/search.py" "<query>" \
+uv run python "skills/search-layer/scripts/search.py" "<query>" \
   --mode deep --intent exploratory --num 5
 ```
 
 时效查询：
 
 ```bash
-python3 "skills/search-layer/scripts/search.py" "<query>" \
+uv run python "skills/search-layer/scripts/search.py" "<query>" \
   --mode deep --intent status --freshness pw --num 5
 ```
 

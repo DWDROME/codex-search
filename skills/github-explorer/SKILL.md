@@ -39,13 +39,13 @@ description: >
 推荐命令：
 
 ```bash
-python3 "skills/github-explorer/scripts/explore.py" "owner/repo" --format markdown
+uv run python "skills/github-explorer/scripts/explore.py" "owner/repo" --format markdown
 ```
 
 深度尽调：
 
 ```bash
-python3 "skills/github-explorer/scripts/explore.py" "owner/repo" \
+uv run python "skills/github-explorer/scripts/explore.py" "owner/repo" \
   --issues 8 --commits 8 --external-num 10 --extract-top 3 \
   --confidence-profile deep --format markdown
 ```
@@ -53,7 +53,7 @@ python3 "skills/github-explorer/scripts/explore.py" "owner/repo" \
 外部补证（示例）：
 
 ```bash
-python3 "skills/search-layer/scripts/search.py" \
+uv run python "skills/search-layer/scripts/search.py" \
   --queries "<project> review" "<project> discussion" \
   --mode deep --intent exploratory --num 5
 ```

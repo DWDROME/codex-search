@@ -30,7 +30,7 @@ MINERU_WORKSPACE=./.runtime/codex-workspace
 
 ```bash
 PYTHONPATH="other/codex-search/src" \
-python3 -m codex_search_stack.cli extract "https://zhuanlan.zhihu.com/p/619438846" --max-chars 3000
+uv run python -m codex_search_stack.cli extract "https://zhuanlan.zhihu.com/p/619438846" --max-chars 3000
 ```
 
 Observed on 2026-02-13:
