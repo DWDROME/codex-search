@@ -32,6 +32,14 @@ class SkillWrapperValidationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("comparison intent requires --queries", proc.stderr)
 
+    def test_research_requires_freshness_for_status(self):
+        proc = self._run(
+            "skills/search-layer/scripts/research.py",
+            ["AI latest progress", "--intent", "status", "--mode", "deep"],
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("requires --freshness", proc.stderr)
+
     def test_content_extract_requires_valid_url(self):
         proc = self._run(
             "skills/content-extract/scripts/content_extract.py",

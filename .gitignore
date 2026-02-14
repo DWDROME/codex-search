@@ -19,6 +19,8 @@ __pycache__/
 .coverage
 .coverage.*
 *.log
+uv.lock
+.venv/
 api_keys.txt
 mineru_key.txt
 key-pool/

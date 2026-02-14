@@ -24,6 +24,9 @@ def render_markdown(report: Dict) -> str:
     issues = report.get("issues") or []
     commits = report.get("commits") or []
     external = report.get("external") or []
+    comparisons = report.get("comparisons") or []
+    index_coverage = report.get("index_coverage") or {}
+    book = report.get("book") or {}
     confidence = report.get("confidence") or {}
 
     topics = ", ".join(repo.get("topics") or []) or "未标注"
@@ -35,6 +38,9 @@ def render_markdown(report: Dict) -> str:
     lines.append("**🎯 一句话定位**")
     lines.append("")
     lines.append(repo.get("description") or "未提供描述")
+    if repo.get("readme_excerpt"):
+        lines.append("")
+        lines.append("- README 摘要: %s" % repo.get("readme_excerpt"))
     lines.append("")
     lines.append("**⚙️ 核心机制**")
     lines.append("")
@@ -80,13 +86,20 @@ def render_markdown(report: Dict) -> str:
         lines.append("- 未找到")
     else:
         for issue in issues:
+            maintainer_text = "yes" if issue.get("maintainer_participated") else "no"
+            maintainer_count = issue.get("maintainer_comment_count", 0)
+            risk_tags = ",".join(issue.get("risk_tags") or []) or "一般"
             lines.append(
-                "- [#%s %s](%s) | comments=%s | state=%s"
+                "- [#%s %s](%s) | q=%s | comments=%s | maintainer=%s(%s) | risk=%s | state=%s"
                 % (
                     issue.get("number"),
                     issue.get("title", "").strip(),
                     issue.get("url", ""),
+                    issue.get("quality_score", 0),
                     issue.get("comments", 0),
+                    maintainer_text,
+                    maintainer_count,
+                    risk_tags,
                     issue.get("state", ""),
                 )
             )
@@ -116,6 +129,63 @@ def render_markdown(report: Dict) -> str:
                 lines.append("  - 抓取: ok=%s, engine=%s" % (extract.get("ok"), extract.get("engine", "")))
                 if extract.get("summary"):
                     lines.append("  - 提取片段: %s" % extract.get("summary"))
+    lines.append("")
+    lines.append("**🧭 收录与索引**")
+    lines.append("")
+    if not index_coverage:
+        lines.append("- 未找到")
+    else:
+        for key, label in [("deepwiki", "DeepWiki"), ("arxiv", "arXiv"), ("zread", "zread")]:
+            item = index_coverage.get(key) or {}
+            status = item.get("status", "not_found")
+            if status == "found":
+                lines.append("- %s: found -> %s" % (label, item.get("url", "")))
+            else:
+                lines.append("- %s: %s" % (label, status))
+    lines.append("")
+    lines.append("**📚 Book 资料包**")
+    lines.append("")
+    if not book:
+        lines.append("- 未找到")
+    else:
+        papers = book.get("papers") or []
+        if papers:
+            for item in papers:
+                lines.append(
+                    "- [论文] [%s](%s) | source=%s"
+                    % (item.get("title", ""), item.get("url", ""), item.get("source", ""))
+                )
+                if item.get("pdf_url"):
+                    lines.append("  - pdf: %s" % item.get("pdf_url", ""))
+        else:
+            lines.append("- 论文: 未找到")
+
+        deep = book.get("deepwiki") or []
+        if deep:
+            for item in deep:
+                lines.append("- [DeepWiki] [%s](%s)" % (item.get("title", ""), item.get("url", "")))
+        else:
+            lines.append("- DeepWiki: 未找到")
+
+        zread = book.get("zread") or []
+        if zread:
+            for item in zread:
+                lines.append("- [zread] [%s](%s)" % (item.get("title", ""), item.get("url", "")))
+        else:
+            lines.append("- zread: 未找到")
+    lines.append("")
+    lines.append("**🆚 竞品对比**")
+    lines.append("")
+    if not comparisons:
+        lines.append("- 未找到")
+    else:
+        for row in comparisons:
+            lines.append("- [%s](%s) | source=%s | evidence=%s" % (
+                row.get("repo", ""),
+                row.get("url", ""),
+                row.get("source", ""),
+                row.get("evidence_title", ""),
+            ))
     lines.append("")
     lines.append("**💬 我的判断**")
     lines.append("")

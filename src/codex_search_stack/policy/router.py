@@ -18,6 +18,14 @@ _PROFILE_DEFAULTS = {
 }
 
 
+def _dedupe_sources(items: List[str]) -> List[str]:
+    out: List[str] = []
+    for item in items:
+        if item not in out:
+            out.append(item)
+    return out
+
+
 @dataclass
 class SearchPlan:
     mode: str
@@ -87,18 +95,23 @@ def build_search_plan(
     has_tavily = bool(settings.tavily_api_key)
     has_grok = bool(settings.grok_api_key and settings.grok_api_url)
 
-    allowed = [source for source in sources if source in {"exa", "tavily", "grok"}]
+    allowed = _dedupe_sources([source for source in sources if source in {"exa", "tavily", "grok"}])
+    notes: List[str] = []
+    if "grok" not in allowed:
+        allowed.append("grok")
+        notes.append("policy_source_forced:grok_required")
+
     use_exa = "exa" in allowed and has_exa
     use_tavily = "tavily" in allowed and has_tavily
     use_grok = "grok" in allowed and has_grok
 
-    notes: List[str] = []
     if "exa" in allowed and not has_exa:
         notes.append("policy_source_unavailable:exa")
     if "tavily" in allowed and not has_tavily:
         notes.append("policy_source_unavailable:tavily")
     if "grok" in allowed and not has_grok:
         notes.append("policy_source_unavailable:grok")
+        notes.append("policy_source_required_unavailable:grok")
 
     if context.mode == "answer" and not use_tavily:
         notes.append("answer_mode_without_tavily")
@@ -119,6 +132,13 @@ def build_search_plan(
 
     if request.budget.max_calls > 0 and len(source_order) > request.budget.max_calls:
         source_order = source_order[: request.budget.max_calls]
+        if "grok" in allowed and has_grok and "grok" not in source_order:
+            if source_order:
+                source_order[-1] = "grok"
+            else:
+                source_order = ["grok"]
+            source_order = _dedupe_sources(source_order)
+            notes.append("budget_trimmed_sources_preserve:grok")
         use_exa = "exa" in source_order
         use_tavily = "tavily" in source_order
         use_grok = "grok" in source_order

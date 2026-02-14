@@ -41,7 +41,7 @@ class Settings:
     mineru_wrapper_path: Optional[str]
     mineru_workspace: Optional[str]
 
-    search_timeout_seconds: int = 30
+    search_timeout_seconds: int = 60
     extract_timeout_seconds: int = 30
     policy: Dict[str, Any] = field(default_factory=dict)
     decision_trace_enabled: bool = True
@@ -155,7 +155,7 @@ def load_settings() -> Settings:
     return Settings(
         grok_api_url=_pick(_cfg_get(config, "search", "grok", "api_url"), env("GROK_API_URL")),
         grok_api_key=_pick(_cfg_get(config, "search", "grok", "api_key"), env("GROK_API_KEY")),
-        grok_model=_pick(_cfg_get(config, "search", "grok", "model"), env("GROK_MODEL"), "grok-4.1"),
+        grok_model=_pick(_cfg_get(config, "search", "grok", "model"), env("GROK_MODEL"), "grok-4.1-thinking"),
         exa_api_key=_pick(_cfg_get(config, "search", "exa", "api_key"), env("EXA_API_KEY")),
         tavily_api_key=_pick(_cfg_get(config, "search", "tavily", "api_key"), env("TAVILY_API_KEY")),
         tavily_api_url=_pick(
@@ -197,7 +197,7 @@ def load_settings() -> Settings:
         ),
         search_timeout_seconds=_to_int(
             _pick(_cfg_get(config, "runtime", "search_timeout_seconds"), env("SEARCH_TIMEOUT_SECONDS")),
-            30,
+            60,
         ),
         extract_timeout_seconds=_to_int(
             _pick(_cfg_get(config, "runtime", "extract_timeout_seconds"), env("EXTRACT_TIMEOUT_SECONDS")),

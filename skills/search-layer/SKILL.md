@@ -27,6 +27,8 @@ description: >
 [Phase 3] 调用 scripts/search.py（多源并行）
   ↓
 [Phase 4] 去重、评分、结构化输出
+  ↓
+[Phase 5] （可选）调用 scripts/research.py（多轮闭环补证）
 ```
 
 > 说明：意图判定与查询拆分由 Agent 协议执行；`search.py` 负责检索、合并、排序与返回标准 JSON。
@@ -69,6 +71,13 @@ uv run python "skills/search-layer/scripts/search.py" "<query>" \
   --mode deep --intent status --freshness pw --num 5
 ```
 
+多轮研究闭环（search -> extract -> critique -> follow-up）：
+
+```bash
+uv run python "skills/search-layer/scripts/research.py" "<query>" \
+  --mode deep --intent exploratory --max-rounds 3 --extract-per-round 2
+```
+
 ## 参数速查
 
 - `--mode`: `fast | deep | answer`
@@ -77,6 +86,13 @@ uv run python "skills/search-layer/scripts/search.py" "<query>" \
 - `--queries`: 多子查询并行
 - `--domain-boost`: 域名加权（逗号分隔）
 - `--num`: 每次返回条数
+
+research 扩展参数：
+
+- `--max-rounds`: 最多追问轮数（默认 3）
+- `--extract-per-round`: 每轮抽取条数（默认 2）
+- `--extract-max-chars`: 抽取截断长度（默认 1600）
+- `--extract-strategy`: `auto/tavily_first/mineru_first/tavily_only/mineru_only`
 
 ## 降级与容错
 

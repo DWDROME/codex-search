@@ -32,10 +32,10 @@
 policy:
   models:
     grok:
-      default: "grok-4.1"
+      default: "grok-4.1-thinking"
       profiles:
         cheap: "grok-4.1-fast"
-        balanced: "grok-4.1"
+        balanced: "grok-4.1-thinking"
         strong: "grok-4.1-thinking"
   routing:
     by_mode:

@@ -10,6 +10,26 @@ from ..policy import build_search_context, build_search_plan
 from .scoring import composite_score, normalize_url
 from .sources import search_exa, search_grok, search_tavily
 
+_GROK_DEFAULT_MAX_ATTEMPTS_PER_CANDIDATE = 3  # 首次 + 额外两次重试
+
+
+def _grok_max_attempts(settings: Settings) -> int:
+    policy = getattr(settings, "policy", {})
+    if not isinstance(policy, dict):
+        return _GROK_DEFAULT_MAX_ATTEMPTS_PER_CANDIDATE
+    search_cfg = policy.get("search") or {}
+    if not isinstance(search_cfg, dict):
+        return _GROK_DEFAULT_MAX_ATTEMPTS_PER_CANDIDATE
+    grok_cfg = search_cfg.get("grok") or {}
+    if not isinstance(grok_cfg, dict):
+        return _GROK_DEFAULT_MAX_ATTEMPTS_PER_CANDIDATE
+    raw = grok_cfg.get("retry_attempts")
+    try:
+        value = int(raw)
+    except Exception:
+        return _GROK_DEFAULT_MAX_ATTEMPTS_PER_CANDIDATE
+    return max(1, min(value, 6))
+
 
 def _dedup(results: List[Dict]) -> List[Dict]:
     seen: Dict[str, Dict] = {}
@@ -42,6 +62,9 @@ def _execute_single_query(
     notes: List[str] = []
     results: List[Dict] = []
     answer: Optional[str] = None
+    grok_attempted = False
+    grok_succeeded = False
+    grok_max_attempts = _grok_max_attempts(settings)
     notes.extend(plan.notes)
     if plan.source_timeouts:
         notes.append(
@@ -65,24 +88,41 @@ def _execute_single_query(
     )
 
     def run_grok_with_pool() -> Tuple[List[Dict], List[str]]:
+        nonlocal grok_attempted, grok_succeeded
         local_notes: List[str] = []
         grok_timeout = plan.source_timeouts.get("grok", settings.search_timeout_seconds)
         for idx, candidate in enumerate(grok_candidates, start=1):
-            try:
-                rows = search_grok(
-                    query,
-                    candidate.url,
-                    candidate.key,
-                    plan.model,
-                    limit,
-                    grok_timeout,
-                    freshness,
-                )
-                if idx > 1:
-                    local_notes.append("grok_pool_rotated:%s" % mask_key(candidate.key))
-                return rows, local_notes
-            except Exception as exc:
-                local_notes.append("grok_candidate_failed:%s:%s" % (mask_key(candidate.key), exc))
+            for attempt in range(1, grok_max_attempts + 1):
+                grok_attempted = True
+                try:
+                    rows = search_grok(
+                        query,
+                        candidate.url,
+                        candidate.key,
+                        plan.model,
+                        limit,
+                        grok_timeout,
+                        freshness,
+                    )
+                    grok_succeeded = True
+                    if idx > 1:
+                        local_notes.append("grok_pool_rotated:%s" % mask_key(candidate.key))
+                    if attempt > 1:
+                        local_notes.append(
+                            "grok_candidate_recovered_after_retry:%s:attempt_%s"
+                            % (mask_key(candidate.key), attempt)
+                        )
+                    return rows, local_notes
+                except Exception as exc:
+                    local_notes.append(
+                        "grok_candidate_failed:%s:attempt_%s:%s"
+                        % (mask_key(candidate.key), attempt, exc)
+                    )
+                    if attempt < grok_max_attempts:
+                        local_notes.append(
+                            "grok_candidate_retrying:%s:next_attempt_%s"
+                            % (mask_key(candidate.key), attempt + 1)
+                        )
         return [], local_notes
 
     def run_tavily_with_pool(include_answer: bool) -> Tuple[Dict, List[str]]:
@@ -113,11 +153,13 @@ def _execute_single_query(
                 results.extend(search_exa(query, settings.exa_api_key, limit, exa_timeout))
             except Exception as exc:
                 notes.append("exa_failed:%s" % exc)
-        elif plan.use_grok and grok_candidates:
+        if plan.use_grok and grok_candidates:
             rows, grok_notes = run_grok_with_pool()
             results.extend(rows)
             notes.extend(grok_notes)
-        else:
+        elif plan.use_grok:
+            notes.append("grok_required_missing_candidate")
+        if not results:
             notes.append("no_source_available_for_fast")
 
     elif mode in ("deep", "answer"):
@@ -128,8 +170,10 @@ def _execute_single_query(
                 futures[pool.submit(search_exa, query, settings.exa_api_key, limit, exa_timeout)] = "exa"
             if plan.use_tavily and tavily_candidates:
                 futures[pool.submit(run_tavily_with_pool, plan.include_answer)] = "tavily"
-            if mode == "deep" and plan.use_grok and grok_candidates:
+            if plan.use_grok and grok_candidates:
                 futures[pool.submit(run_grok_with_pool)] = "grok"
+            elif plan.use_grok:
+                notes.append("grok_required_missing_candidate")
 
             for future in as_completed(futures):
                 source_name = futures[future]
@@ -160,6 +204,15 @@ def _execute_single_query(
     else:
         notes.append("unknown_mode:%s" % mode)
 
+    if plan.use_grok:
+        notes.append("grok_required_retry_attempts:%s" % grok_max_attempts)
+        if not grok_attempted:
+            notes.append("grok_required_not_attempted")
+        elif not grok_succeeded:
+            notes.append("grok_required_unsatisfied_after_retries")
+        else:
+            notes.append("grok_required_satisfied")
+
     trace.add_event(
         stage="search.execute",
         decision="source_execution_done",
@@ -183,7 +236,7 @@ def run_multi_source_search(
     boost_domains: Optional[Iterable[str]] = None,
     sources: Optional[Iterable[str]] = None,
     model: Optional[str] = None,
-    model_profile: str = "balanced",
+    model_profile: str = "strong",
     risk_level: str = "medium",
     budget_max_calls: int = 6,
     budget_max_tokens: int = 12000,

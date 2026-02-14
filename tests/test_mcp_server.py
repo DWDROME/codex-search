@@ -73,7 +73,7 @@ class MCPServerTests(unittest.TestCase):
 
     def test_tools_registered(self) -> None:
         self.assertEqual(self.mcp.name, "codex-search")
-        self.assertEqual(set(self.mcp.tools.keys()), {"search", "extract", "explore", "get_config_info"})
+        self.assertEqual(set(self.mcp.tools.keys()), {"search", "extract", "explore", "research", "get_config_info"})
 
     def test_search_tool_success(self) -> None:
         payload = {"mode": "deep", "query": "q", "count": 1, "results": [{"title": "x", "url": "https://a"}]}
@@ -108,16 +108,23 @@ class MCPServerTests(unittest.TestCase):
         with patch.object(self.mod, "load_settings", return_value=types.SimpleNamespace(confidence_profile="deep")), patch.object(
             self.mod,
             "run_github_explorer",
-            return_value={"target": "openai/codex", "score": 88},
-        ) as run_explore, patch.object(self.mod, "render_markdown", return_value="# report") as render_md:
+            return_value={"ok": True, "target": "openai/codex", "repo": {"full_name": "openai/codex"}},
+        ) as run_explore, patch.object(self.mod, "attach_book_to_result") as attach_book, patch.object(
+            self.mod,
+            "persist_explore_artifacts",
+            return_value={"out_dir": ".runtime/demo", "book_downloaded": 1, "book_download_failed": 0},
+        ) as persist, patch.object(self.mod, "render_markdown", return_value="# report") as render_md:
             md = self.mcp.tools["explore"](target="openai/codex", output_format="markdown")
-            raw = self.mcp.tools["explore"](target="openai/codex", output_format="json")
+            raw = self.mcp.tools["explore"](target="openai/codex", output_format="json", with_artifacts=False)
 
         data = json.loads(raw)
-        self.assertEqual(md, "# report")
+        self.assertIn("# report", md)
+        self.assertIn("**📁 输出目录**", md)
         self.assertEqual(data["target"], "openai/codex")
         self.assertEqual(run_explore.call_count, 2)
-        render_md.assert_called_once()
+        self.assertEqual(attach_book.call_count, 2)
+        persist.assert_called_once()
+        self.assertEqual(render_md.call_count, 2)
 
     def test_failure_injection_search_tool(self) -> None:
         with patch.object(self.mod, "load_settings", return_value=object()), patch.object(
@@ -157,6 +164,24 @@ class MCPServerTests(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertEqual(data["error"]["code"], "invalid_arguments")
         self.assertIn("issues must be between 3 and 20", data["error"]["message"])
+
+    def test_research_tool_success(self) -> None:
+        payload = {"ok": True, "query": "q", "count": 1, "results": [{"title": "x", "url": "https://a"}]}
+        with patch.object(self.mod, "load_settings", return_value=object()), patch.object(
+            self.mod, "run_research_loop", return_value=payload
+        ) as run_research:
+            raw = self.mcp.tools["research"](query="q")
+        data = json.loads(raw)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["count"], 1)
+        run_research.assert_called_once()
+
+    def test_research_tool_validation_error(self) -> None:
+        raw = self.mcp.tools["research"](query="latest ai news", intent="status")
+        data = json.loads(raw)
+        self.assertFalse(data["ok"])
+        self.assertEqual(data["error"]["code"], "invalid_arguments")
+        self.assertIn("requires freshness", data["error"]["message"])
 
 
 if __name__ == "__main__":

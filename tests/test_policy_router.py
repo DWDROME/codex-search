@@ -73,9 +73,10 @@ class PolicyRouterTests(unittest.TestCase):
 
         plan = build_search_plan(req, ctx, settings, trace)
 
-        self.assertEqual(plan.source_order, ["exa"])
-        self.assertTrue(plan.use_exa)
-        self.assertFalse(plan.use_grok)
+        self.assertEqual(plan.source_order, ["grok"])
+        self.assertFalse(plan.use_exa)
+        self.assertTrue(plan.use_grok)
+        self.assertIn("budget_trimmed_sources_preserve:grok", plan.notes)
         self.assertIn("budget_trimmed_sources:max_calls", plan.notes)
 
     def test_budget_latency_is_split_to_per_source_timeout(self) -> None:
@@ -91,6 +92,17 @@ class PolicyRouterTests(unittest.TestCase):
         self.assertEqual(plan.source_timeouts.get("exa"), 2)
         self.assertEqual(plan.source_timeouts.get("tavily"), 2)
         self.assertEqual(plan.source_timeouts.get("grok"), 2)
+
+    def test_grok_is_forced_even_when_not_requested(self) -> None:
+        settings = _settings()
+        req = SearchRequest(query="test", mode="deep", sources=["exa"])
+        ctx = build_search_context(req)
+        trace = DecisionTrace()
+
+        plan = build_search_plan(req, ctx, settings, trace)
+
+        self.assertIn("grok", plan.source_order)
+        self.assertIn("policy_source_forced:grok_required", plan.notes)
 
     def test_answer_mode_without_tavily_is_marked(self) -> None:
         settings = _settings(tavily_api_key=None)

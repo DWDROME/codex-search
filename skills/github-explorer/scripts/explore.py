@@ -12,12 +12,27 @@ if str(SRC_DIR) not in sys.path:
 
 from codex_search_stack.config import load_settings
 from codex_search_stack.github_explorer import render_markdown, run_github_explorer
+from codex_search_stack.github_explorer.artifacts import attach_book_to_result, persist_explore_artifacts
 from codex_search_stack.validators import validate_explore_protocol
 
 
 _REPO_TITLE_RE = re.compile(r"^# \[[^\]]+\]\(https?://github\.com/[^)]+\)", re.MULTILINE)
 _ISSUE_LINE_RE = re.compile(r"- \[#\d+ .+\]\(https?://github\.com/.+/issues/\d+\)")
-_EXTERNAL_LINE_RE = re.compile(r"\[.+\]\(https?://[^)]+\)")
+_COMMIT_LINE_RE = re.compile(r"- \[`[0-9a-f]{7}`\]\(https?://github\.com/.+/commit/[0-9a-f]+\)")
+_EXTERNAL_LINE_RE = re.compile(r"^- \[[^\]]+\]\(https?://[^)]+\) \| source=", re.MULTILINE)
+_COMPETITOR_LINE_RE = re.compile(r"^- \[[^\]]+\]\(https?://[^)]+\) \| source=", re.MULTILINE)
+
+
+def _section_body(markdown_text: str, header: str) -> str:
+    idx = markdown_text.find(header)
+    if idx < 0:
+        return ""
+    tail = markdown_text[idx + len(header) :]
+    next_idx = tail.find("\n**")
+    if next_idx < 0:
+        return tail
+    return tail[:next_idx]
+
 
 def _markdown_contract_violations(markdown_text: str) -> list[str]:
     violations: list[str] = []
@@ -25,12 +40,30 @@ def _markdown_contract_violations(markdown_text: str) -> list[str]:
         violations.append("missing_repo_title_link")
     if "**🔥 精选 Issue**" not in markdown_text:
         violations.append("missing_issue_section")
-    if not _ISSUE_LINE_RE.search(markdown_text):
+    issue_body = _section_body(markdown_text, "**🔥 精选 Issue**")
+    if issue_body and (not _ISSUE_LINE_RE.search(issue_body)) and ("- 未找到" not in issue_body):
         violations.append("missing_issue_links")
+    if "**🛠 最近提交**" not in markdown_text:
+        violations.append("missing_commit_section")
+    commit_body = _section_body(markdown_text, "**🛠 最近提交**")
+    if commit_body and (not _COMMIT_LINE_RE.search(commit_body)) and ("- 未找到" not in commit_body):
+        violations.append("missing_commit_links")
     if "**📰 外部信号**" not in markdown_text:
         violations.append("missing_external_section")
-    if not _EXTERNAL_LINE_RE.search(markdown_text):
+    external_body = _section_body(markdown_text, "**📰 外部信号**")
+    if external_body and (not _EXTERNAL_LINE_RE.search(external_body)) and ("- 未找到" not in external_body):
         violations.append("missing_external_links")
+    if "**🧭 收录与索引**" not in markdown_text:
+        violations.append("missing_index_section")
+    if "**📚 Book 资料包**" not in markdown_text:
+        violations.append("missing_book_section")
+    if "**🆚 竞品对比**" not in markdown_text:
+        violations.append("missing_competitor_section")
+    competitor_body = _section_body(markdown_text, "**🆚 竞品对比**")
+    if competitor_body and (not _COMPETITOR_LINE_RE.search(competitor_body)) and ("- 未找到" not in competitor_body):
+        violations.append("missing_competitor_links")
+    if "**💬 我的判断**" not in markdown_text:
+        violations.append("missing_judgement_section")
     return violations
 
 
@@ -44,6 +77,10 @@ def main() -> int:
     parser.add_argument("--no-extract", action="store_true")
     parser.add_argument("--confidence-profile", choices=["deep", "quick"], default="")
     parser.add_argument("--format", choices=["json", "markdown"], default="markdown")
+    parser.add_argument("--out-dir", default="")
+    parser.add_argument("--book-max", type=int, default=5)
+    parser.add_argument("--no-book-download", action="store_true")
+    parser.add_argument("--no-artifacts", action="store_true")
 
     args = parser.parse_args()
     err, normalized = validate_explore_protocol(
@@ -78,9 +115,29 @@ def main() -> int:
         confidence_profile=(args.confidence_profile or settings.confidence_profile).strip().lower(),
     )
 
+    if result.get("ok"):
+        attach_book_to_result(result, settings=settings, max_items=max(0, args.book_max))
+
+    markdown_text = render_markdown(result)
+    artifacts = None
+    if not args.no_artifacts:
+        artifacts = persist_explore_artifacts(
+            result=result,
+            markdown_text=markdown_text,
+            project_root=PROJECT_ROOT,
+            out_dir=args.out_dir,
+            download_book=(not args.no_book_download),
+            timeout=max(10, int(getattr(settings, "extract_timeout_seconds", 30) or 30)),
+        )
+        result["artifacts"] = artifacts
+
     if str(normalized.get("output_format", args.format)) == "markdown":
-        markdown_text = render_markdown(result)
         violations = _markdown_contract_violations(markdown_text)
+        if artifacts:
+            markdown_text += "\n\n**📁 输出目录**\n\n"
+            markdown_text += "- %s\n" % artifacts.get("out_dir", "")
+            markdown_text += "- book_downloaded=%s\n" % artifacts.get("book_downloaded", 0)
+            markdown_text += "- book_download_failed=%s\n" % artifacts.get("book_download_failed", 0)
         if violations:
             markdown_text += "\n\n**⚠️ 协议校验告警**\n\n"
             for item in violations:

@@ -30,6 +30,10 @@ codex-search explore "microsoft/graphrag" --confidence-profile quick --format js
 - `--extract-top` / `--no-extract`
 - `--confidence-profile`: `deep | quick`
 - `--format`: `markdown | json`
+- `--out-dir`：指定产物目录
+- `--book-max`：Book 论文上限
+- `--no-book-download`：只生成索引，不下载 PDF
+- `--no-artifacts`：不落盘产物
 
 ---
 
@@ -39,6 +43,10 @@ codex-search explore "microsoft/graphrag" --confidence-profile quick --format js
 
 - `explore.github_token`（推荐，有助于提高 API 配额）
 - `runtime.confidence_profile`（默认 profile）
+- `policy.explore.external.model_profile`（外部检索模型档位，默认 `strong`）
+- `policy.explore.external.primary_sources`（首轮检索源，默认 `["grok","exa"]`）
+- `policy.explore.external.fallback_source`（首轮无结果后的回退源，默认 `tavily`）
+- `policy.explore.external.followup_rounds`（自动补证轮数，默认 `2`）
 - 其余依赖透传到 search/extract（如 Grok/Tavily/MinerU）
 
 ---
@@ -46,19 +54,27 @@ codex-search explore "microsoft/graphrag" --confidence-profile quick --format js
 ## 运行逻辑（简版）
 
 1. 解析目标仓库（URL 或 `owner/repo`，失败则走搜索解析）。
-2. 拉取 GitHub 元信息、精选 issue、最近 commits。
-3. 搜索外部信号；可选对 Top N 外链做提取。
-4. 计算 confidence：
+2. 拉取 GitHub 元信息（含 README 摘要）、精选 issue、最近 commits。
+3. 对 issue 做质量刻画（评论热度 + maintainer 参与 + 风险标签）。
+4. 搜索外部信号（社区域名 + arXiv + zread + alternatives）；若 DeepWiki/zread 直连可用会优先注入。
+5. 可选对 Top N 外链做提取。
+6. 若关键覆盖缺失（如 arXiv/zread），会自动生成 follow-up query，按 `followup_rounds` 做多轮补证。
+7. 计算 confidence：
    - `deep`：偏元数据/活跃度/可验证性
    - `quick`：偏外部覆盖/稳定性
-5. 输出报告并附执行注记 `notes`。
+8. 输出报告并附执行注记 `notes`。
 
 ---
 
 ## 输出重点字段
 
-- `repo`：基础元信息
-- `issues` / `commits` / `external`
+- `repo`：基础元信息（含 `readme_excerpt`）
+- `issues`：含 `maintainer_participated` / `risk_tags` / `quality_score`
+- `commits` / `external`
+- `comparisons`：竞品候选（含证据标题）
+- `index_coverage`：DeepWiki/arXiv/zread 收录状态
+- `book`：论文/DeepWiki/zread 资料包索引
+- `artifacts`：落盘目录与下载统计（`report.md/json` + `book/`）
 - `confidence.score` / `confidence.level` / `confidence.profile`
 - `confidence.factors[]`（含 weighted + raw 分）
 
