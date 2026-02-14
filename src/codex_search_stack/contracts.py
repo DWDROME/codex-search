@@ -1,6 +1,39 @@
 from dataclasses import asdict, dataclass, field
+from hashlib import blake2s
+import itertools
+import os
+import socket
+import threading
+import time
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
+
+
+_REQUEST_ID_COUNTER = itertools.count()
+_REQUEST_ID_HOST = socket.gethostname()
+_REQUEST_ID_AGENT = os.getenv("CODEX_SEARCH_AGENT_ID", "").strip()
+_REQUEST_ID_LOCK = threading.Lock()
+
+
+def _new_request_id() -> str:
+    try:
+        with _REQUEST_ID_LOCK:
+            counter = next(_REQUEST_ID_COUNTER)
+        material = ":".join(
+            [
+                str(time.time_ns()),
+                str(os.getpid()),
+                str(threading.get_ident()),
+                str(counter),
+                _REQUEST_ID_HOST,
+                _REQUEST_ID_AGENT,
+            ]
+        )
+        digest = blake2s(material.encode("utf-8"), digest_size=16).hexdigest()
+        return digest[:12]
+    except Exception:
+        # Keep trace IDs best-effort even in restricted runtimes.
+        fallback = "fallback:%s:%s" % (time.monotonic_ns(), id(object()))
+        return blake2s(fallback.encode("utf-8"), digest_size=16).hexdigest()[:12]
 
 
 @dataclass
@@ -127,7 +160,7 @@ class DecisionEvent:
 
 @dataclass
 class DecisionTrace:
-    request_id: str = field(default_factory=lambda: uuid4().hex[:12])
+    request_id: str = field(default_factory=_new_request_id)
     policy_version: str = "policy.v1"
     events: List[DecisionEvent] = field(default_factory=list)
 
