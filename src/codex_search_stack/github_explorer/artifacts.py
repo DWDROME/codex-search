@@ -41,6 +41,19 @@ def _arxiv_pdf_url(url: str) -> str:
     return ""
 
 
+def _direct_pdf_url(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            return ""
+        path = (parsed.path or "").lower()
+        if path.endswith(".pdf"):
+            return url
+    except Exception:
+        return ""
+    return ""
+
+
 def _safe_filename(text: str, fallback: str) -> str:
     raw = _SAFE_NAME_RE.sub("_", (text or "").strip()).strip("._")
     if not raw:
@@ -76,8 +89,9 @@ def collect_book(result: Dict[str, Any], settings: Settings, max_items: int) -> 
         if "zread" in host and url not in seen_links:
             seen_links.add(url)
             book["zread"].append({"title": item.get("title", "zread"), "url": url, "source": item.get("source", "")})
-        if "arxiv.org" in host:
-            key = url.rstrip("/")
+        paper_pdf_url = _arxiv_pdf_url(url) or _direct_pdf_url(url)
+        if paper_pdf_url:
+            key = paper_pdf_url.rstrip("/")
             if key in seen_papers:
                 continue
             seen_papers.add(key)
@@ -86,7 +100,7 @@ def collect_book(result: Dict[str, Any], settings: Settings, max_items: int) -> 
                     "title": item.get("title", ""),
                     "url": url,
                     "source": item.get("source", ""),
-                    "pdf_url": _arxiv_pdf_url(url),
+                    "pdf_url": paper_pdf_url,
                 }
             )
 

@@ -55,6 +55,8 @@ runtime:
 - `policy.explore.external.primary_sources`: github-explorer 首轮 source mix（例如 `["grok","exa"]`）
 - `policy.explore.external.fallback_source`: 首轮无结果回退源（默认 `tavily`）
 - `policy.explore.external.followup_rounds`: 缺证据时自动补证轮数（默认 2）
+- `policy.research.default_protocol`: research 默认协议（建议 `codex_research_v1`）
+- `policy.research.fixed_rounds`: `codex_research_v1` 固定轮数（建议 4）
 
 示例：
 
@@ -82,6 +84,9 @@ policy:
       primary_sources: ["grok", "exa"]
       fallback_source: "tavily"
       followup_rounds: 2
+  research:
+    default_protocol: "codex_research_v1"
+    fixed_rounds: 4
 ```
 
 ## 可观测性（DecisionTrace）

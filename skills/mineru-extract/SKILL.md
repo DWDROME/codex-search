@@ -1,75 +1,130 @@
 ---
 name: mineru-extract
 description: >
-  MinerU 官方 API 封装。用于反爬站点或复杂文档（PDF/Office/图片/复杂 HTML）解析，
-  输出高保真 Markdown 与结构化结果，作为 content-extract 的下游兜底。
+  Use the official MinerU (mineru.net) parsing API to convert URL sources
+  (HTML pages like WeChat articles, or direct PDF/Office/image links) into
+  clean Markdown + structured outputs. Use when web fetch/browser extraction
+  is blocked or low quality, and higher-fidelity parsing is needed.
 ---
 
-# mineru-extract（Codex 版）
+# MinerU Extract（official API）
 
-## 使用场景
+把 MinerU 当作“上游内容标准化器”：提交 URL -> 轮询任务完成 -> 下载结果 zip -> 提取主 Markdown。
 
-- `content-extract` 触发 fallback 到 MinerU
-- 目标页面反爬严格（知乎、微信、小红书）
-- 文档类型复杂（PDF、PPT、扫描件、表格/公式密集）
+## Quick start（MCP 语义对齐）
 
-## 前置配置
+我们对齐 MinerU MCP 的心智模型，但**不运行 MCP server**。
 
-至少配置以下之一：
+- 主脚本（推荐）：`scripts/mineru_parse_documents.py`
+  - 输入：`--file-sources`（逗号/换行分隔）
+  - 输出：stdout JSON 合同 `{ ok, items, errors }`
+- 低层脚本：`scripts/mineru_extract.py`（单 URL）
 
-- `MINERU_TOKEN`
-- `MINERU_TOKEN_FILE`（例如 `~/.codex/secrets/mineru_key.txt`）
+认证：
 
-可选：
+- 必须提供 `MINERU_TOKEN`（mineru.net Bearer Token）
+- 可选 `MINERU_API_BASE`（默认 `https://mineru.net`）
 
-- `MINERU_API_BASE`（默认 `https://mineru.net`）
-- `MINERU_WORKSPACE` / `CODEX_WORKSPACE`（缓存目录）
+默认模型启发式（与脚本一致）：
 
-## 模型选择建议
+- URL 以 `.pdf/.doc/.docx/.ppt/.pptx/.png/.jpg/.jpeg` 结尾 -> `pipeline`
+- 其他 URL -> `MinerU-HTML`（适合微信文章等 HTML 页面）
 
-- HTML 页面（知乎/微信等）：`MinerU-HTML`
-- 通用文档流：`pipeline`
-- 视觉复杂页面可尝试：`vlm`
+---
 
-## 命令模板
+## 1) 配置 Token（建议写 skill 目录 `.env`）
+
+```bash
+# other/codex-search/skills/mineru-extract/.env
+MINERU_TOKEN=your_token_here
+MINERU_API_BASE=https://mineru.net
+```
+
+## 2) URL 解析为 Markdown（推荐）
+
+MCP 风格包装脚本（返回 JSON）：
 
 ```bash
 uv run python "skills/mineru-extract/scripts/mineru_parse_documents.py" \
-  --file-sources "https://zhuanlan.zhihu.com/p/619438846" \
+  --file-sources "<URL1>\n<URL2>" \
+  --language ch \
+  --enable-ocr \
+  --model-version MinerU-HTML \
+  --timeout 600
+```
+
+如果需要把 markdown 文本内联到 JSON（便于后续总结）：
+
+```bash
+uv run python "skills/mineru-extract/scripts/mineru_parse_documents.py" \
+  --file-sources "<URL>" \
   --model-version MinerU-HTML \
   --emit-markdown --max-chars 20000
 ```
 
-多 URL：
+低层单 URL（直接输出 markdown）：
 
 ```bash
-uv run python "skills/mineru-extract/scripts/mineru_parse_documents.py" \
-  --file-sources "<url1>\n<url2>" --model-version MinerU-HTML
+uv run python "skills/mineru-extract/scripts/mineru_extract.py" \
+  "<URL>" --model MinerU-HTML --print > "/tmp/out.md"
 ```
 
-## 输出约定
+---
 
-脚本返回 JSON，核心字段：
+## Output（结果合同）
 
 - `ok`
 - `items[]`（每个输入 URL 的结果）
 - `errors[]`
 
-`items[]` 常见子字段：
+`items[]` 常见字段：
 
-- `markdown`
-- `markdown_path`
-- `zip_path`
+- `source`
 - `task_id`
+- `model_version`
+- `full_zip_url`
+- `out_dir`
+- `zip_path`
+- `markdown_path`
+- `cached`
+- `cache_key`
 
-## 故障与降级
+缓存目录（默认）：
 
-- 403/登录墙/地理限制：记录错误并保留原始 URL，建议用户提供可访问镜像。
-- 解析超时：增大超时、拆分输入或降低并发。
-- 解析质量不佳：切换模型（`MinerU-HTML` ↔ `pipeline/vlm`）再试。
+- `other/codex-search/.runtime/codex-workspace/mineru-cache/<cache_key>/`
+- 可通过 `MINERU_WORKSPACE` 或 `CODEX_WORKSPACE` 覆盖
 
-## 质量红线
+---
+
+## 常用参数
+
+- `--model-version`: `pipeline | vlm | MinerU-HTML`
+- `--enable-ocr`: 启用 OCR（映射到 `is_ocr`）
+- `--enable-table true|false`: 表格识别
+- `--enable-formula true|false`: 公式识别
+- `--language ch|en|...`
+- `--page-ranges "2,4-6"`（`MinerU-HTML` 不支持）
+- `--extra-formats "docx,html,latex"`
+- `--timeout` / `--poll-interval`
+- `--cache` / `--no-cache` / `--force`
+
+---
+
+## Failure modes & fallback
+
+- 受保护页面（登录/权限/地域限制）会失败。
+  - 处理：保留原始 URL + 错误信息，建议提供可访问镜像 URL。
+- 当前流程不支持本地文件路径（会写入 `errors[].next_step`）。
+  - 处理：使用公开 URL，或后续新增 MinerU 批量上传流程。
+- 解析质量不佳：
+  - HTML 页面优先 `MinerU-HTML`
+  - 文档类优先 `pipeline`，必要时试 `vlm`
+
+---
+
+## 交付红线（强制）
 
 - 输出必须带原始来源 URL。
-- 错误必须透传到 `errors/notes`，禁止静默失败。
-- 作为兜底模块，不做“无证据成功”返回。
+- 错误必须透传到 `errors`，禁止静默失败。
+- 不得把受限页面伪装为“解析成功”。
+- 本 skill 只做解析，不做登录绕过或权限绕过。

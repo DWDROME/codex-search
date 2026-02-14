@@ -9,6 +9,8 @@ from .observability import aggregate_decision_trace_jsonl
 from .research import run_research_loop
 from .search.orchestrator import run_multi_source_search
 
+_HIDDEN_HELP = argparse.SUPPRESS
+
 
 def _split_domains(raw: str) -> List[str]:
     if not raw:
@@ -32,18 +34,18 @@ def main() -> int:
     search.add_argument("--intent", choices=["factual", "status", "comparison", "tutorial", "exploratory", "news", "resource"])
     search.add_argument("--freshness", choices=["pd", "pw", "pm", "py"])
     search.add_argument("--num", type=int, default=5)
-    search.add_argument("--domain-boost", default="")
-    search.add_argument("--sources", default="auto", help="auto 或 exa,tavily,grok")
-    search.add_argument("--model", default="", help="请求级显式模型，优先级高于 profile")
-    search.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong")
-    search.add_argument("--risk-level", choices=["low", "medium", "high"], default="medium")
-    search.add_argument("--budget-max-calls", type=int, default=6)
-    search.add_argument("--budget-max-tokens", type=int, default=12000)
-    search.add_argument("--budget-max-latency-ms", type=int, default=30000)
+    search.add_argument("--domain-boost", default="", help=_HIDDEN_HELP)
+    search.add_argument("--sources", default="auto", help=_HIDDEN_HELP)
+    search.add_argument("--model", default="", help=_HIDDEN_HELP)
+    search.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong", help=_HIDDEN_HELP)
+    search.add_argument("--risk-level", choices=["low", "medium", "high"], default="medium", help=_HIDDEN_HELP)
+    search.add_argument("--budget-max-calls", type=int, default=6, help=_HIDDEN_HELP)
+    search.add_argument("--budget-max-tokens", type=int, default=12000, help=_HIDDEN_HELP)
+    search.add_argument("--budget-max-latency-ms", type=int, default=30000, help=_HIDDEN_HELP)
 
     extract = sub.add_parser("extract", help="Run extraction pipeline")
     extract.add_argument("url")
-    extract.add_argument("--force-mineru", action="store_true")
+    extract.add_argument("--force-mineru", action="store_true", help=_HIDDEN_HELP)
     extract.add_argument("--max-chars", type=int, default=20000)
     extract.add_argument(
         "--strategy",
@@ -53,38 +55,47 @@ def main() -> int:
 
     explore = sub.add_parser("explore", help="Run GitHub explorer workflow")
     explore.add_argument("target", help="GitHub URL, owner/repo, or project name")
-    explore.add_argument("--issues", type=int, default=5)
-    explore.add_argument("--commits", type=int, default=5)
-    explore.add_argument("--external-num", type=int, default=8)
-    explore.add_argument("--extract-top", type=int, default=2)
-    explore.add_argument("--no-extract", action="store_true")
-    explore.add_argument("--confidence-profile", choices=["deep", "quick"])
+    explore.add_argument("--issues", type=int, default=5, help=_HIDDEN_HELP)
+    explore.add_argument("--commits", type=int, default=5, help=_HIDDEN_HELP)
+    explore.add_argument("--external-num", type=int, default=8, help=_HIDDEN_HELP)
+    explore.add_argument("--extract-top", type=int, default=2, help=_HIDDEN_HELP)
+    explore.add_argument("--no-extract", action="store_true", help=_HIDDEN_HELP)
+    explore.add_argument("--confidence-profile", choices=["deep", "quick"], help=_HIDDEN_HELP)
     explore.add_argument("--format", choices=["markdown", "json"], default="markdown")
 
-    research = sub.add_parser("research", help="Run multi-round research loop")
+    # research 保留为内部高级模式。
+    research = sub.add_parser("research", help="[internal] advanced research mode")
     research.add_argument("query")
-    research.add_argument("--mode", choices=["fast", "deep", "answer"], default="deep")
+    research.add_argument("--mode", choices=["fast", "deep", "answer"], default="deep", help=_HIDDEN_HELP)
     research.add_argument(
         "--intent",
         choices=["factual", "status", "comparison", "tutorial", "exploratory", "news", "resource"],
+        help=_HIDDEN_HELP,
     )
-    research.add_argument("--freshness", choices=["pd", "pw", "pm", "py"])
-    research.add_argument("--num", type=int, default=6)
-    research.add_argument("--domain-boost", default="")
-    research.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong")
-    research.add_argument("--max-rounds", type=int, default=3)
-    research.add_argument("--extract-per-round", type=int, default=2)
-    research.add_argument("--extract-max-chars", type=int, default=1600)
+    research.add_argument("--freshness", choices=["pd", "pw", "pm", "py"], help=_HIDDEN_HELP)
+    research.add_argument("--num", type=int, default=6, help=_HIDDEN_HELP)
+    research.add_argument("--domain-boost", default="", help=_HIDDEN_HELP)
+    research.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong", help=_HIDDEN_HELP)
+    research.add_argument(
+        "--protocol",
+        choices=["codex_research_v1", "legacy"],
+        default="codex_research_v1",
+        help=_HIDDEN_HELP,
+    )
+    research.add_argument("--max-rounds", type=int, default=3, help=_HIDDEN_HELP)
+    research.add_argument("--extract-per-round", type=int, default=2, help=_HIDDEN_HELP)
+    research.add_argument("--extract-max-chars", type=int, default=1600, help=_HIDDEN_HELP)
     research.add_argument(
         "--extract-strategy",
         choices=["auto", "tavily_first", "mineru_first", "tavily_only", "mineru_only"],
         default="auto",
+        help=_HIDDEN_HELP,
     )
 
-    trace_stats = sub.add_parser("trace-stats", help="Aggregate persisted DecisionTrace JSONL")
-    trace_stats.add_argument("--path", default="", help="DecisionTrace JSONL path (default from config)")
-    trace_stats.add_argument("--limit", type=int, default=5000, help="Scan latest N lines")
-    trace_stats.add_argument("--format", choices=["json"], default="json")
+    trace_stats = sub.add_parser("trace-stats", help="[internal] decision trace stats")
+    trace_stats.add_argument("--path", default="", help=_HIDDEN_HELP)
+    trace_stats.add_argument("--limit", type=int, default=5000, help=_HIDDEN_HELP)
+    trace_stats.add_argument("--format", choices=["json"], default="json", help=_HIDDEN_HELP)
 
     args = parser.parse_args()
     settings = load_settings()
@@ -151,6 +162,7 @@ def main() -> int:
             extract_per_round=max(0, int(args.extract_per_round)),
             extract_max_chars=max(200, int(args.extract_max_chars)),
             extract_strategy=args.extract_strategy,
+            protocol=args.protocol,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

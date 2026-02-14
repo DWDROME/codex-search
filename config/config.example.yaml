@@ -60,6 +60,9 @@ policy:
       primary_sources: ["grok", "exa"]
       fallback_source: "tavily"
       followup_rounds: 2
+  research:
+    default_protocol: "codex_research_v1"
+    fixed_rounds: 4
 
 observability:
   decision_trace:

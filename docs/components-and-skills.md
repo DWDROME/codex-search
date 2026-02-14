@@ -1,67 +1,53 @@
-# 组件清单（主组件 + 附属 Skill）
+# 组件清单（统一版）
 
-本文用于回答两个问题：
+## 一、对外只承诺 4 个能力（Skills）
 
-1. 我们现在有哪些可运行组件？
-2. 这些组件分别对应上游哪些 Skill/能力？
+`codex-search` 对外产品面统一为以下四项：
 
----
-
-## 一、主组件（当前仓库内）
-
-| 组件 | 代码位置 | 职责 | CLI 入口 |
-|---|---|---|---|
-| Search Orchestrator | `src/codex_search_stack/search/` | 多源搜索编排、去重、意图评分、号池重试 | `codex-search search` |
-| Research Loop | `src/codex_search_stack/research/` | 多轮闭环（search→extract→critique→follow-up） | `codex-search research` |
-| Extract Pipeline | `src/codex_search_stack/extract/` | URL 提取，优先 Tavily，失败降级 MinerU | `codex-search extract` |
-| GitHub Explorer | `src/codex_search_stack/github_explorer/` | Repo/Issues/Commits/外部信号采集 + 置信度报告 | `codex-search explore` |
-| Smoke & CI Hook | `scripts/` + `.github/workflows/` | 本地回归、CI 自动化、脱敏环境快照 | `./scripts/smoke_phase6.sh` / `./scripts/ci_smoke_hook.sh` |
-
----
-
-## 二、附属工程能力（本仓库内）
-
-| 能力 | 位置 | 用途 |
+| 对外能力 | Skill | 主职责 |
 |---|---|---|
-| Key Pool（Grok/Tavily） | `src/codex_search_stack/key_pool.py` | 多 key 候选顺序重试，降低 429/单 key 失效风险 |
-| Confidence Profile | `src/codex_search_stack/github_explorer/orchestrator.py` | `deep/quick` 两套评分权重 |
-| Masked Env Snapshot | `scripts/masked_env_snapshot.py` | CI 侧输出可审计但不泄露明文密钥的环境快照 |
+| 多源搜索 | `search-layer` | Exa + Tavily + Grok 搜索、去重、排序、交叉验证 |
+| 网页提取 | `content-extract` | URL -> Markdown，普通页优先 Tavily，失败/高阻降级 MinerU |
+| 复杂文档提取 | `mineru-extract` | PDF/Office/图片/复杂 HTML 解析为高保真 Markdown |
+| GitHub 项目调研 | `github-explorer` | Repo/Issues/Commits/外部信号聚合，输出结构化报告 |
+
+> 这四项是“对用户讲能力”时的唯一口径。
 
 ---
 
-## 三、上游 Skill 对应关系（迁移映射）
+## 二、内部支撑组件（不作为独立对外能力）
 
-| 上游 Skill / 模块 | 本仓库对应 |
-|---|---|
-| `search-layer` | `src/codex_search_stack/search/{sources,scoring,orchestrator}.py` |
-| `content-extract` | `src/codex_search_stack/extract/pipeline.py` |
-| `mineru-extract` | `src/codex_search_stack/extract/mineru_adapter.py` |
-| `github-explorer` | `src/codex_search_stack/github_explorer/{orchestrator,report}.py` |
-| `git-workflow` | `skills/git-workflow/`（流程型 Skill，主要约束 Git 操作步骤与输出规范） |
-
-证据见：`docs/migration-map.md`
-
----
-
-## 四、外部依赖能力（非本仓库代码）
-
-| 类别 | 典型项 | 说明 |
+| 内部组件 | 代码位置 | 说明 |
 |---|---|---|
-| 搜索 API | Exa / Tavily / Grok | 由 `config/config.yaml` 提供，运行时按可用性自动降级 |
-| 提取后端 | Tavily Extract / MinerU API | Extract Pipeline 统一编排 |
-| CI 环境 | GitHub Actions | 使用 `.github/workflows/ci-smoke.yml` |
+| Search Core | `src/codex_search_stack/search/` | search-layer 的执行内核 |
+| Extract Core | `src/codex_search_stack/extract/` | content-extract/mineru-extract 的统一管线 |
+| Explore Core | `src/codex_search_stack/github_explorer/` | github-explorer 的执行与报告内核 |
+| Research Loop | `src/codex_search_stack/research/` | search-layer 的“多轮补证模式”，属于内部高级流程 |
+| API Availability | `skills/api-availability/scripts/api_availability.py` | API 可用性体检（配置检查 + 实时探测 + strict 失败） |
+| Policy Router | `src/codex_search_stack/policy/` | 路由、模型、预算、降级策略 |
+| Decision Trace | `src/codex_search_stack/observability.py` | 决策轨迹与回放（审计/调试） |
+| CLI / MCP | `src/codex_search_stack/cli.py` `src/codex_search_stack/mcp_server.py` | 运行入口，不增加能力种类 |
 
 ---
 
-## 五、建议阅读顺序
+## 三、为什么看起来“很多”
 
-1. `README.md`（总体能力与命令）
-2. `docs/migration-map.md`（上游映射）
-3. 组件子 README：
-   - `docs/search.md`
-   - `docs/extract.md`
-   - `docs/explore.md`
-   - `docs/internal/ci-smoke.md`
-4. `docs/internal/phase*.md`（阶段细节）
-5. `docs/internal/testing.md`（测试入口与覆盖说明）
-6. `src/codex_search_stack/cli.py`（命令入口）
+原因不是能力多，而是把“能力 + 平台化支撑”放在了同一仓库：
+
+- 能力层：只有 4 个（上表）
+- 平台层：配置、可观测、协议校验、CI、兼容入口
+
+统一后原则：
+
+1. 对外描述只讲四大能力。
+2. Research/API 体检/Policy/Trace/CI 只作为内部支撑描述。
+3. 新功能若不能映射到四大能力之一，默认不新增对外能力名。
+
+---
+
+## 四、建议阅读顺序
+
+1. `README.md`（统一能力口径）
+2. `skills/README.md`（四个 Skill 的实际入口）
+3. `docs/call-protocol.md`（统一调用章法）
+4. 组件说明：`docs/search.md` / `docs/extract.md` / `docs/explore.md`

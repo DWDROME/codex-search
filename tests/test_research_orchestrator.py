@@ -142,6 +142,36 @@ class ResearchOrchestratorTests(unittest.TestCase):
         self.assertTrue(payload["results"][0]["extract"].get("ok"))
         self.assertEqual(payload["results"][0]["extract"].get("engine"), "mineru")
 
+    def test_research_protocol_v1_runs_fixed_rounds(self) -> None:
+        rows = [
+            SearchResult(
+                title="doc",
+                url="https://docs.example.org/a",
+                snippet="overview",
+                source="exa",
+                score=0.5,
+            )
+        ]
+        fake_settings = self._settings()
+        fake_settings.policy = {"research": {"fixed_rounds": 4}}
+        with patch(
+            "codex_search_stack.research.orchestrator.run_multi_source_search",
+            return_value=types.SimpleNamespace(results=rows, notes=[]),
+        ) as run_search:
+            payload = run_research_loop(
+                query="example project",
+                settings=fake_settings,
+                protocol="codex_research_v1",
+                max_rounds=1,
+                extract_per_round=0,
+            )
+
+        self.assertEqual(run_search.call_count, 4)
+        self.assertEqual(payload["protocol"], "codex_research_v1")
+        self.assertEqual(payload["round_count"], 4)
+        self.assertEqual(payload["stop_reason"], "protocol_rounds_completed")
+        self.assertTrue(all(item.get("objective") for item in payload["rounds"]))
+
 
 if __name__ == "__main__":
     unittest.main()

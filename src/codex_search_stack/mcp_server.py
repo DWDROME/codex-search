@@ -13,7 +13,6 @@ from .validators import (
     coerce_int,
     extract_anti_bot_domains,
     is_high_risk_host,
-    split_domain_boost,
     validate_explore_protocol,
     validate_extract_protocol,
     validate_search_protocol,
@@ -23,13 +22,6 @@ try:
     from mcp.server.fastmcp import FastMCP
 except Exception:  # pragma: no cover - optional runtime dependency
     FastMCP = None  # type: ignore
-
-
-def _split_sources(raw: str) -> List[str]:
-    if not raw:
-        return ["auto"]
-    items = [item.strip().lower() for item in raw.split(",") if item.strip()]
-    return items or ["auto"]
 
 
 def _json_output(payload: dict) -> str:
@@ -57,7 +49,7 @@ if FastMCP is not None:
 
     @mcp.tool(
         name="search",
-        description="多源搜索（Exa/Tavily/Grok）并返回结构化 JSON，支持 mode/intent/freshness 与请求级策略参数。",
+        description="多源搜索（Exa/Tavily/Grok）并返回结构化 JSON（对外最小参数面）。",
     )
     def mcp_search(
         query: str,
@@ -65,23 +57,12 @@ if FastMCP is not None:
         intent: str = "",
         freshness: str = "",
         num: int = 5,
-        domain_boost: str = "",
-        sources: str = "auto",
-        model: str = "",
-        model_profile: str = "strong",
-        risk_level: str = "medium",
-        budget_max_calls: int = 6,
-        budget_max_tokens: int = 12000,
-        budget_max_latency_ms: int = 30000,
     ) -> str:
         normalized_intent = (intent or "").strip().lower()
         normalized_freshness = (freshness or "").strip().lower()
         normalized_mode = (mode or "deep").strip().lower()
         normalized_num = coerce_int(num, 5)
-        max_calls = coerce_int(budget_max_calls, 6)
-        max_tokens = coerce_int(budget_max_tokens, 12000)
-        max_latency_ms = coerce_int(budget_max_latency_ms, 30000)
-        domains = split_domain_boost(domain_boost)
+        domains: List[str] = []
         err, details = validate_search_protocol(
             queries=[query],
             intent=normalized_intent,
@@ -103,25 +84,24 @@ if FastMCP is not None:
             intent=normalized_intent or None,
             freshness=normalized_freshness or None,
             boost_domains=domains,
-            sources=_split_sources(sources),
-            model=(model or "").strip() or None,
-            model_profile=(model_profile or "strong").strip().lower(),
-            risk_level=(risk_level or "medium").strip().lower(),
-            budget_max_calls=max(1, max_calls),
-            budget_max_tokens=max(1, max_tokens),
-            budget_max_latency_ms=max(1000, max_latency_ms),
+            sources=["auto"],
+            model=None,
+            model_profile="strong",
+            risk_level="medium",
+            budget_max_calls=6,
+            budget_max_tokens=12000,
+            budget_max_latency_ms=30000,
         )
         return _json_output(result.to_dict())
 
     @mcp.tool(
         name="extract",
-        description="URL 内容提取（Tavily + MinerU 策略路由），返回结构化 JSON，可用于反爬站点兜底。",
+        description="URL 内容提取（Tavily + MinerU 策略路由），返回结构化 JSON（对外最小参数面）。",
     )
     def mcp_extract(
         url: str,
-        force_mineru: bool = False,
-        max_chars: int = 20000,
         strategy: str = "auto",
+        max_chars: int = 20000,
     ) -> str:
         err, normalized = validate_extract_protocol(url=url, max_chars=max_chars, strategy=strategy)
         if err:
@@ -130,6 +110,7 @@ if FastMCP is not None:
         settings = load_settings()
         host = str(normalized.get("host", ""))
         anti_bot_domains = extract_anti_bot_domains(getattr(settings, "policy", {}))
+        force_mineru = False
         if is_high_risk_host(host, anti_bot_domains):
             force_mineru = True
         result = run_extract_pipeline(
@@ -146,27 +127,18 @@ if FastMCP is not None:
 
     @mcp.tool(
         name="explore",
-        description="GitHub 项目解析与尽调，支持 JSON/Markdown 输出，并可自动产出 report/book 资料包。",
+        description="GitHub 项目解析与尽调（对外最小参数面）。",
     )
     def mcp_explore(
         target: str,
-        issues: int = 5,
-        commits: int = 5,
-        external_num: int = 8,
-        extract_top: int = 2,
-        with_extract: bool = True,
-        confidence_profile: str = "",
         output_format: str = "json",
         with_artifacts: bool = True,
-        out_dir: str = "",
-        book_max: int = 5,
-        download_book: bool = True,
     ) -> str:
         err, normalized = validate_explore_protocol(
-            issues=issues,
-            commits=commits,
-            external_num=external_num,
-            extract_top=extract_top,
+            issues=5,
+            commits=5,
+            external_num=8,
+            extract_top=2,
             output_format=output_format,
         )
         if err:
@@ -176,15 +148,15 @@ if FastMCP is not None:
         result = run_github_explorer(
             target=target,
             settings=settings,
-            issues_limit=max(1, int(normalized.get("issues", 5))),
-            commits_limit=max(1, int(normalized.get("commits", 5))),
-            external_limit=max(1, int(normalized.get("external_num", 8))),
-            extract_top=max(0, int(normalized.get("extract_top", 2))),
-            with_extract=with_extract,
-            confidence_profile=(confidence_profile or settings.confidence_profile).strip().lower(),
+            issues_limit=5,
+            commits_limit=5,
+            external_limit=8,
+            extract_top=2,
+            with_extract=True,
+            confidence_profile=settings.confidence_profile,
         )
         if result.get("ok"):
-            attach_book_to_result(result, settings=settings, max_items=max(0, coerce_int(book_max, 5)))
+            attach_book_to_result(result, settings=settings, max_items=5)
 
         markdown_text = render_markdown(result)
         artifacts = None
@@ -193,8 +165,8 @@ if FastMCP is not None:
                 result=result,
                 markdown_text=markdown_text,
                 project_root=_PROJECT_ROOT,
-                out_dir=out_dir or "",
-                download_book=download_book,
+                out_dir="",
+                download_book=True,
                 timeout=max(10, int(getattr(settings, "extract_timeout_seconds", 30) or 30)),
             )
             result["artifacts"] = artifacts
@@ -210,26 +182,26 @@ if FastMCP is not None:
 
     @mcp.tool(
         name="research",
-        description="多轮研究闭环（search -> extract -> critique -> follow-up），返回可追溯 JSON。",
+        description="多轮研究闭环（search-layer 内部高级模式）。",
     )
     def mcp_research(
         query: str,
-        mode: str = "deep",
         intent: str = "",
         freshness: str = "",
         num: int = 6,
-        domain_boost: str = "",
-        model_profile: str = "strong",
         max_rounds: int = 3,
-        extract_per_round: int = 2,
-        extract_max_chars: int = 1600,
-        extract_strategy: str = "auto",
+        protocol: str = "codex_research_v1",
     ) -> str:
         normalized_intent = (intent or "").strip().lower()
         normalized_freshness = (freshness or "").strip().lower()
-        normalized_mode = (mode or "deep").strip().lower()
         normalized_num = coerce_int(num, 6)
-        domains = split_domain_boost(domain_boost)
+        normalized_max_rounds = coerce_int(max_rounds, 3)
+        if normalized_max_rounds < 1 or normalized_max_rounds > 8:
+            return _error_output(
+                code="invalid_arguments",
+                message="max_rounds must be between 1 and 8",
+            )
+        domains: List[str] = []
         err, details = validate_search_protocol(
             queries=[query],
             intent=normalized_intent,
@@ -246,16 +218,17 @@ if FastMCP is not None:
         payload = run_research_loop(
             query=query,
             settings=settings,
-            mode=normalized_mode,
+            mode="deep",
             intent=normalized_intent or None,
             freshness=normalized_freshness or None,
             limit=max(1, normalized_num),
             domain_boost=domains,
-            model_profile=(model_profile or "strong").strip().lower(),
-            max_rounds=max(1, coerce_int(max_rounds, 3)),
-            extract_per_round=max(0, coerce_int(extract_per_round, 2)),
-            extract_max_chars=max(200, coerce_int(extract_max_chars, 1600)),
-            extract_strategy=(extract_strategy or "auto").strip().lower(),
+            model_profile="strong",
+            max_rounds=normalized_max_rounds,
+            extract_per_round=2,
+            extract_max_chars=1600,
+            extract_strategy="auto",
+            protocol=(protocol or "codex_research_v1").strip().lower(),
         )
         return _json_output(payload)
 

@@ -33,6 +33,17 @@
 
 **工作流程**：`Codex/Agent → Skills 或 MCP → Core Policy → Search/Extract/Explore → 结构化 JSON`  
 
+### 对外能力边界（统一口径）
+
+对外只承诺 4 个 Skill 能力：
+
+1. `search-layer`
+2. `content-extract`
+3. `mineru-extract`
+4. `github-explorer`
+
+`research/policy/decision_trace/ci` 属于内部支撑，不单独作为对外能力名。
+
 <details>
 <summary><b>💡 为什么选择 codex-search</b></summary>
 
@@ -54,10 +65,10 @@
 - ✅ 意图感知参数（`intent` / `mode` / `freshness`）
 - ✅ 对比类并行检索（`--queries`）
 - ✅ 反爬提取自动回退（`auto -> mineru_only`）
-- ✅ Git 提交流程 Skill（状态快照 + 提交/PR 规范化流程）
 - ✅ MCP 协议层参数校验（`invalid_arguments` 统一错误合同）
 - ✅ YAML 单入口配置（避免 env 与配置文件双入口混乱）
 - ✅ 决策轨迹与统计（`decision_trace` + 聚合脚本）
+- ✅ API 可用性体检（`api-availability`，支持 live probe + strict）
 
 ---
 
@@ -166,7 +177,7 @@ codex mcp get "codex-search"
    - `skills/content-extract/SKILL.md`
    - `skills/mineru-extract/SKILL.md`
    - `skills/github-explorer/SKILL.md`
-   - `skills/git-workflow/SKILL.md`
+   - `skills/api-availability/SKILL.md`（API 可用性体检）
 2. 若 Skills 不可用或需要标准化工具接口，再使用 MCP：
    - `search`
    - `extract`
@@ -207,7 +218,7 @@ codex mcp get "codex-search"
 - GitHub 调研用 github-explorer
 
 只有在 Skills 不可用或需要标准化接口时，才使用 MCP 工具：
-search / extract / explore / research / get_config_info
+search / extract / explore / get_config_info（research 为高级模式）
 
 输出必须附来源 URL；时效信息必须标日期；失败必须重试并说明策略调整。
 ```
@@ -240,34 +251,39 @@ uv run python "skills/search-layer/scripts/research.py" "FAST-LIVO2 架构风险
   --mode deep --intent exploratory --max-rounds 3 --extract-per-round 2
 ```
 
-### 3) 普通网页提取
+### 4) 普通网页提取
 
 ```bash
 uv run python "skills/content-extract/scripts/content_extract.py" \
   --url "https://platform.openai.com/docs/guides/tools-web-search" --max-chars 3000
 ```
 
-### 4) 反爬网页提取（知乎示例）
+### 5) 反爬网页提取（知乎示例）
 
 ```bash
 uv run python "skills/content-extract/scripts/content_extract.py" \
   --url "https://zhuanlan.zhihu.com/p/619438846" --max-chars 3000
 ```
 
-### 5) GitHub 项目尽调
+### 6) GitHub 项目尽调
 
 ```bash
 uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
   --issues 8 --commits 8 --external-num 10 --extract-top 3 --format markdown
 ```
 
-### 6) Git 工作流快照
+### 7) API 可用性体检（新增）
 
 ```bash
-uv run python "skills/git-workflow/scripts/git_snapshot.py" --repo "."
-```
+# 只看配置与 readiness（不打外网）
+uv run python "skills/api-availability/scripts/api_availability.py" --no-live --json
 
----
+# 配置 + 实时探测
+uv run python "skills/api-availability/scripts/api_availability.py" --json
+
+# 严格模式：已配置服务失败即返回非 0
+uv run python "skills/api-availability/scripts/api_availability.py" --strict --json
+```
 
 ## GitHub Explorer（项目尽调）
 
@@ -293,6 +309,16 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
 # 深度尽调（推荐）
 uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
   --issues 8 --commits 8 --external-num 10 --extract-top 3 --confidence-profile deep --format markdown
+
+# 超详细深度调查（社区声量>=6、竞品>=4、反对证据>=2，默认硬失败）
+uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
+  --issues 8 --commits 8 --external-num 12 --extract-top 4 \
+  --confidence-profile deep --format markdown
+
+# 如需仅告警不失败（调试用）
+uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
+  --issues 8 --commits 8 --external-num 12 --extract-top 4 \
+  --confidence-profile deep --format markdown --no-hard-fail-contract
 ```
 
 ### 输入与输出
@@ -311,6 +337,7 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
 - `comparisons`
 - `index_coverage`（`deepwiki/arxiv/zread`）
 - `confidence`
+- `book`（命中 arXiv 或直接 PDF 时，会下载到 `book/papers/`）
 
 ### 典型场景
 
@@ -360,11 +387,13 @@ uv run python "skills/github-explorer/scripts/explore.py" \
 | `content-extract` | URL 到 Markdown 的统一入口，自动策略与回退 |
 | `mineru-extract` | MinerU API 封装（反爬/复杂文档兜底） |
 | `github-explorer` | GitHub 项目结构化解析与尽调 |
-| `git-workflow` | Git 提交流程助手（快照、提交规范、PR 流程模板） |
+| `api-availability` | 当前 API 可用性体检（配置+实时探测） |
+
+> 对外能力口径固定为前 4 项；`api-availability` 属于内部支撑 Skill（排障前置检查）。
 
 ### MCP 工具说明
 
-本项目提供五个 MCP 工具：
+本项目 MCP 对外主能力对应 3 个工具（`search/extract/explore`），另有 `research/get_config_info` 作为高级与运维入口：
 
 #### `search` - 多源搜索
 
@@ -375,13 +404,6 @@ uv run python "skills/github-explorer/scripts/explore.py" \
 | `intent` | string | ❌ | `""` | `factual/status/comparison/tutorial/exploratory/news/resource` |
 | `freshness` | string | ❌ | `""` | `pd/pw/pm/py` |
 | `num` | int | ❌ | `5` | 返回结果数（协议校验范围 `1..20`） |
-| `domain_boost` | string | ❌ | `""` | 域名加权（逗号分隔） |
-| `sources` | string | ❌ | `auto` | 指定源组合 |
-| `model` / `model_profile` | string | ❌ | `""` / `strong` | 请求级模型选择 |
-| `risk_level` | string | ❌ | `medium` | 风险等级 |
-| `budget_*` | int | ❌ | 内置默认 | 调用预算与延迟预算 |
-
-> Grok 已设为必选源：若本轮 Grok 请求失败，会自动重试；次数由 `policy.search.grok.retry_attempts` 控制（默认 3 次尝试）。
 
 <details>
 <summary><b>返回示例</b>（点击展开）</summary>
@@ -416,9 +438,10 @@ uv run python "skills/github-explorer/scripts/explore.py" \
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
 | `url` | string | ✅ | - | 目标 URL（仅支持 `http/https`） |
-| `force_mineru` | bool | ❌ | `false` | 强制 MinerU |
-| `max_chars` | int | ❌ | `20000` | 输出截断（协议校验范围 `500..200000`） |
 | `strategy` | string | ❌ | `auto` | `auto/tavily_first/mineru_first/tavily_only/mineru_only` |
+| `max_chars` | int | ❌ | `20000` | 输出截断（协议校验范围 `500..200000`） |
+
+> 命中高风险域名（如知乎/微信/小红书）会自动提升为 MinerU 路由。
 
 <details>
 <summary><b>返回示例</b>（点击展开）</summary>
@@ -446,33 +469,21 @@ uv run python "skills/github-explorer/scripts/explore.py" \
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
 | `target` | string | ✅ | - | 仓库 URL / `owner/repo` / 关键词 |
-| `issues` | int | ❌ | `5` | 采集 issue 数（`3..20`） |
-| `commits` | int | ❌ | `5` | 采集 commit 数（`3..20`） |
-| `external_num` | int | ❌ | `8` | 外部信号数量（`2..30`） |
-| `extract_top` | int | ❌ | `2` | 提取前 N 条外链（`0..external_num`） |
-| `with_extract` | bool | ❌ | `true` | 是否启用外链提取 |
-| `confidence_profile` | string | ❌ | 读配置 | `deep/quick` 置信度策略 |
 | `output_format` | string | ❌ | `json` | `json/markdown` |
 | `with_artifacts` | bool | ❌ | `true` | 是否落盘 `report/book` 资料包 |
-| `out_dir` | string | ❌ | `""` | 指定输出目录（默认 `".runtime/github-explorer/<repo>_<time>/"`） |
-| `book_max` | int | ❌ | `5` | Book 收录论文上限（会补探测 arXiv） |
-| `download_book` | bool | ❌ | `true` | 是否下载论文 PDF 到 `book/papers/` |
+
+> 其余采样规模参数由策略层统一管理，避免调用侧参数漂移。
 
 #### `research` - 多轮研究闭环
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
 | `query` | string | ✅ | - | 研究主题（单查询入口） |
-| `mode` | string | ❌ | `deep` | `fast/deep/answer` |
 | `intent` | string | ❌ | `""` | 同 `search` 意图枚举 |
 | `freshness` | string | ❌ | `""` | `pd/pw/pm/py` |
 | `num` | int | ❌ | `6` | 每轮保留结果上限 |
-| `domain_boost` | string | ❌ | `""` | 域名加权 |
-| `model_profile` | string | ❌ | `strong` | `cheap/balanced/strong` |
-| `max_rounds` | int | ❌ | `3` | 最大追问轮数 |
-| `extract_per_round` | int | ❌ | `2` | 每轮抓取条数 |
-| `extract_max_chars` | int | ❌ | `1600` | 抽取截断长度 |
-| `extract_strategy` | string | ❌ | `auto` | 提取策略（同 extract） |
+| `max_rounds` | int | ❌ | `3` | 追问轮数上限（`1..8`） |
+| `protocol` | string | ❌ | `codex_research_v1` | `codex_research_v1/legacy` |
 
 返回包含 `rounds/results/notes/decision_trace`，可直接回放“为什么继续追问、为什么停止”。
 
@@ -530,7 +541,7 @@ A：先跑 `uv run python "scripts/check_api_config.py"`；重点看 `search` re
 A：`strategy=auto` 下命中高阻域名会自动路由 `mineru_only`，这是预期行为。
 
 **Q3：如何验证 MCP 是否真的可用？**  
-A：先 `codex mcp get "codex-search"`，再调用 `get_config_info`、`search`、`extract`、`explore`、`research` 逐项 smoke。
+A：先 `codex mcp get "codex-search"`，再调用 `get_config_info`、`search`、`extract`、`explore` 逐项 smoke；需要多轮补证时再测 `research`。
 
 **Q4：为什么 comparison 在 MCP 报参数错误？**  
 A：MCP 单查询入口不支持 comparison 多查询流程；请改用 skill `search.py --queries ...`。

@@ -27,6 +27,12 @@ def main() -> int:
     parser.add_argument("--num", type=int, default=6)
     parser.add_argument("--domain-boost", default="")
     parser.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong")
+    parser.add_argument(
+        "--protocol",
+        choices=["codex_research_v1", "legacy"],
+        default="codex_research_v1",
+        help="默认 codex_research_v1（固定四轮）；legacy 为旧自适应流程。",
+    )
     parser.add_argument("--max-rounds", type=int, default=3)
     parser.add_argument("--extract-per-round", type=int, default=2)
     parser.add_argument("--extract-max-chars", type=int, default=1600)
@@ -69,6 +75,7 @@ def main() -> int:
         extract_per_round=max(0, int(args.extract_per_round)),
         extract_max_chars=max(200, int(args.extract_max_chars)),
         extract_strategy=args.extract_strategy,
+        protocol=args.protocol,
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -76,4 +83,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

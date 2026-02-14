@@ -21,6 +21,10 @@ _ISSUE_LINE_RE = re.compile(r"- \[#\d+ .+\]\(https?://github\.com/.+/issues/\d+\
 _COMMIT_LINE_RE = re.compile(r"- \[`[0-9a-f]{7}`\]\(https?://github\.com/.+/commit/[0-9a-f]+\)")
 _EXTERNAL_LINE_RE = re.compile(r"^- \[[^\]]+\]\(https?://[^)]+\) \| source=", re.MULTILINE)
 _COMPETITOR_LINE_RE = re.compile(r"^- \[[^\]]+\]\(https?://[^)]+\) \| source=", re.MULTILINE)
+_LINK_LINE_RE = re.compile(r"^- \[[^\]]+\]\(https?://[^)]+\)", re.MULTILINE)
+_MIN_COMMUNITY_SIGNALS = 6
+_MIN_COMPETITORS = 4
+_MIN_NEGATIVE_EVIDENCE = 2
 
 
 def _section_body(markdown_text: str, header: str) -> str:
@@ -32,6 +36,21 @@ def _section_body(markdown_text: str, header: str) -> str:
     if next_idx < 0:
         return tail
     return tail[:next_idx]
+
+
+def _section_between(markdown_text: str, start_header: str, end_header: str) -> str:
+    start_idx = markdown_text.find(start_header)
+    if start_idx < 0:
+        return ""
+    body_start = start_idx + len(start_header)
+    end_idx = markdown_text.find(end_header, body_start)
+    if end_idx < 0:
+        end_idx = len(markdown_text)
+    return markdown_text[body_start:end_idx]
+
+
+def _count_link_rows(section_text: str) -> int:
+    return len(_LINK_LINE_RE.findall(section_text or ""))
 
 
 def _markdown_contract_violations(markdown_text: str) -> list[str]:
@@ -62,6 +81,25 @@ def _markdown_contract_violations(markdown_text: str) -> list[str]:
     competitor_body = _section_body(markdown_text, "**🆚 竞品对比**")
     if competitor_body and (not _COMPETITOR_LINE_RE.search(competitor_body)) and ("- 未找到" not in competitor_body):
         violations.append("missing_competitor_links")
+    if "**📰 社区声量**" not in markdown_text:
+        violations.append("missing_community_section")
+    else:
+        community_body = _section_between(markdown_text, "**📰 社区声量**", "**🧭 收录与索引**")
+        community_count = _count_link_rows(community_body)
+        if community_count < _MIN_COMMUNITY_SIGNALS:
+            violations.append("community_signals_insufficient:%s" % community_count)
+    if "**🆚 竞品对比**" in markdown_text:
+        competitor_body_full = _section_between(markdown_text, "**🆚 竞品对比**", "**❎ 反对证据**")
+        competitor_count = _count_link_rows(competitor_body_full)
+        if competitor_count < _MIN_COMPETITORS:
+            violations.append("competitors_insufficient:%s" % competitor_count)
+    if "**❎ 反对证据**" not in markdown_text:
+        violations.append("missing_negative_evidence_section")
+    else:
+        negative_body = _section_between(markdown_text, "**❎ 反对证据**", "**💬 我的判断**")
+        negative_count = _count_link_rows(negative_body)
+        if negative_count < _MIN_NEGATIVE_EVIDENCE:
+            violations.append("negative_evidence_insufficient:%s" % negative_count)
     if "**💬 我的判断**" not in markdown_text:
         violations.append("missing_judgement_section")
     return violations
@@ -81,6 +119,12 @@ def main() -> int:
     parser.add_argument("--book-max", type=int, default=5)
     parser.add_argument("--no-book-download", action="store_true")
     parser.add_argument("--no-artifacts", action="store_true")
+    parser.add_argument(
+        "--hard-fail-contract",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="When true, markdown contract violations return non-zero and fail the run.",
+    )
 
     args = parser.parse_args()
     err, normalized = validate_explore_protocol(
@@ -145,7 +189,9 @@ def main() -> int:
         print(markdown_text)
         if not result.get("ok"):
             return 1
-        return 2 if violations else 0
+        if violations:
+            return 3 if args.hard_fail_contract else 2
+        return 0
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("ok") else 1

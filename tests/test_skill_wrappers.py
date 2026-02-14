@@ -72,6 +72,15 @@ class SkillWrapperValidationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("page-ranges", proc.stdout)
 
+    def test_api_availability_no_live_json(self):
+        proc = self._run(
+            "skills/api-availability/scripts/api_availability.py",
+            ["--json", "--no-live"],
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn('"services"', proc.stdout)
+        self.assertIn('"summary"', proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -181,6 +181,29 @@ class ExtractPipelineTests(unittest.TestCase):
         self.assertIn("mineru_failed", out.notes)
         self.assertIsNotNone(out.decision_trace)
 
+    def test_linux_do_unavailable_skips_mineru_fallback(self) -> None:
+        settings = make_settings()
+        url = "https://linux.do/t/topic/1355015"
+        candidates = [KeyCandidate("tavily", "https://api.tavily.com", "tvly-dev-555555555555", 100, "pool")]
+        unavailable = ExtractionResponse(
+            ok=False,
+            source_url=url,
+            engine="tavily_extract",
+            markdown="Oops! That page doesn’t exist or is private. Checking your Browser...",
+            notes=["source_unavailable:linux_do_private_or_auth_required", "skip_fallback:source_unavailable"],
+            sources=[url],
+        )
+        with patch("codex_search_stack.extract.pipeline.build_service_candidates", return_value=candidates), patch(
+            "codex_search_stack.extract.pipeline._extract_via_tavily_once",
+            return_value=unavailable,
+        ), patch("codex_search_stack.extract.pipeline.run_mineru_wrapper") as mineru:
+            out = run_extract_pipeline(url, settings=settings, strategy="tavily_first")
+
+        self.assertFalse(out.ok)
+        self.assertEqual(out.engine, "tavily_extract")
+        self.assertIn("source_unavailable:linux_do_private_or_auth_required", out.notes)
+        mineru.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

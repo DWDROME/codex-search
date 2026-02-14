@@ -4,6 +4,8 @@
 
 `search` 是多源检索编排层，负责把 Exa / Tavily / Grok 的结果统一聚合、去重和排序。
 
+统一调用章法见：`docs/call-protocol.md`
+
 主入口：
 
 - 代码：`src/codex_search_stack/search/orchestrator.py`
@@ -23,12 +25,8 @@ codex-search search "RAG framework comparison" --mode deep --intent exploratory 
 - `--intent`: `factual | status | comparison | tutorial | exploratory | news | resource`
 - `--freshness`: `pd | pw | pm | py`
 - `--num`: 返回条数
-- `--domain-boost`: 域名加权，逗号分隔
-- `--sources`: `auto` 或 `exa,tavily,grok`（请求级 source mix）
-- `--model`: 请求级模型覆盖（优先于 profile）
-- `--model-profile`: `cheap | balanced | strong`
-- `--risk-level`: `low | medium | high`
-- `--budget-max-calls / --budget-max-tokens / --budget-max-latency-ms`: 请求预算约束
+
+> 其余高级参数（sources/model/budget 等）已内收为内部调试项，默认调用不建议显式传入。
 
 ---
 
@@ -50,39 +48,29 @@ codex-search search "RAG framework comparison" --mode deep --intent exploratory 
 
 ## 运行逻辑（简版）
 
-1. 先构建 `SearchRequest`，再由 Policy 计算 `SearchPlan`（模型 + source mix + 并发）。
-2. 依据 `mode` 和 `sources` 选择源：
-   - `fast`：优先 Exa，其次 Grok
-   - `deep`：并行 Exa + Tavily + Grok（按可用性）
-   - `answer`：以 Tavily answer 能力为主
-3. Grok 为必选源：即使请求未显式包含，也会强制纳入路由；若失败按 `policy.search.grok.retry_attempts` 重试（默认 3 次总尝试）。
-4. Grok/Tavily 按 key pool 候选依次重试。
-5. URL 归一化去重；若配置了 `intent`，做意图感知评分后排序。
-6. 当设置 `budget-max-latency-ms` 时，会按启用 source 数量分摊为每源 timeout。
-7. 输出统一 JSON（`SearchResponse`），可选包含 `decision_trace`。
-
-默认情况下使用 `model_profile=strong`，可在请求级改为 `cheap/balanced` 以换取更低延迟。
+1. 读取查询与最小参数（`mode/intent/freshness/num`）。
+2. 按策略层自动选择可用搜索源并执行（Exa/Tavily/Grok）。
+3. 失败源自动降级与重试，不阻断整体结果返回。
+4. 对结果做去重、评分、排序，输出统一 JSON。
+5. 如启用可观测，会附带 `decision_trace` 供回放。
 
 ---
 
 ## 常见问题
 
 - 没有结果：先确认至少有一个搜索源 key 可用，或 `search.key_pool.file` 存在且可读。
-- 结果质量一般：优先补 `--intent`，并加 `--domain-boost`。
+- 结果质量一般：优先补 `--intent`，必要时改写查询词并增加上下文关键词。
 - 某源频繁失败：看返回 `notes`（如 `*_failed` / `*_pool_rotated`）定位具体源与 key。
 
 ---
 
-## 进阶：Research 闭环
+## 进阶：search-layer 内部多轮补证
 
-当你需要“先搜一轮 -> 自动发现缺口 -> 继续追问补证”时，建议改用：
-
-```bash
-codex-search research "你的问题" --mode deep --intent exploratory --max-rounds 3
-```
-
-对应 skills 入口：
+当单轮搜索证据不足时，可启用 search-layer 的内部高级模式：
 
 ```bash
-uv run python "skills/search-layer/scripts/research.py" "你的问题" --max-rounds 3
+uv run python "skills/search-layer/scripts/research.py" "你的问题" \
+  --protocol codex_research_v1 --extract-per-round 2
 ```
+
+说明：该模式属于 search-layer 的内部能力扩展，不作为独立对外能力名称。

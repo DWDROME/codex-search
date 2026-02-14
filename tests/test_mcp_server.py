@@ -153,17 +153,17 @@ class MCPServerTests(unittest.TestCase):
         with patch.object(self.mod, "load_settings", return_value=settings), patch.object(
             self.mod, "run_extract_pipeline", return_value=_DummyResult(payload)
         ) as run_extract:
-            self.mcp.tools["extract"](url="https://zhuanlan.zhihu.com/p/1", force_mineru=False)
+            self.mcp.tools["extract"](url="https://zhuanlan.zhihu.com/p/1")
 
         _, kwargs = run_extract.call_args
         self.assertTrue(kwargs["force_mineru"])
 
     def test_explore_tool_validation_error(self) -> None:
-        raw = self.mcp.tools["explore"](target="openai/codex", issues=1)
+        raw = self.mcp.tools["explore"](target="openai/codex", output_format="xml")
         data = json.loads(raw)
         self.assertFalse(data["ok"])
         self.assertEqual(data["error"]["code"], "invalid_arguments")
-        self.assertIn("issues must be between 3 and 20", data["error"]["message"])
+        self.assertIn("output_format must be json or markdown", data["error"]["message"])
 
     def test_research_tool_success(self) -> None:
         payload = {"ok": True, "query": "q", "count": 1, "results": [{"title": "x", "url": "https://a"}]}
@@ -175,6 +175,21 @@ class MCPServerTests(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["count"], 1)
         run_research.assert_called_once()
+        _, kwargs = run_research.call_args
+        self.assertEqual(kwargs.get("protocol"), "codex_research_v1")
+        self.assertEqual(kwargs.get("max_rounds"), 3)
+
+    def test_research_tool_accepts_max_rounds(self) -> None:
+        payload = {"ok": True, "query": "q", "count": 1, "results": [{"title": "x", "url": "https://a"}]}
+        with patch.object(self.mod, "load_settings", return_value=object()), patch.object(
+            self.mod, "run_research_loop", return_value=payload
+        ) as run_research:
+            raw = self.mcp.tools["research"](query="q", protocol="legacy", max_rounds=6)
+        data = json.loads(raw)
+        self.assertTrue(data["ok"])
+        _, kwargs = run_research.call_args
+        self.assertEqual(kwargs.get("protocol"), "legacy")
+        self.assertEqual(kwargs.get("max_rounds"), 6)
 
     def test_research_tool_validation_error(self) -> None:
         raw = self.mcp.tools["research"](query="latest ai news", intent="status")
@@ -182,6 +197,13 @@ class MCPServerTests(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertEqual(data["error"]["code"], "invalid_arguments")
         self.assertIn("requires freshness", data["error"]["message"])
+
+    def test_research_tool_max_rounds_validation_error(self) -> None:
+        raw = self.mcp.tools["research"](query="q", max_rounds=99)
+        data = json.loads(raw)
+        self.assertFalse(data["ok"])
+        self.assertEqual(data["error"]["code"], "invalid_arguments")
+        self.assertIn("max_rounds must be between 1 and 8", data["error"]["message"])
 
 
 if __name__ == "__main__":

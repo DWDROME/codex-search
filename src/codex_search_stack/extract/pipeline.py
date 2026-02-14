@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 import time
+from urllib.parse import urlparse
 
 import requests
 
@@ -28,6 +29,33 @@ def _is_content_usable(markdown: Optional[str]) -> bool:
         "complete the captcha",
     ]
     return not any(s in head for s in bad_signals)
+
+
+def _host(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _source_unavailable_reason(url: str, markdown: Optional[str]) -> str:
+    text = (markdown or "").strip()
+    if not text:
+        return ""
+    head = text[:2000].lower()
+    host = _host(url)
+    if host.endswith("linux.do"):
+        linux_do_signals = [
+            "page doesn’t exist or is private",
+            "page doesn't exist or is private",
+            "checking your browser",
+            "verification failed",
+            "verification expired",
+            "oops! that page",
+        ]
+        if any(signal in head for signal in linux_do_signals):
+            return "source_unavailable:linux_do_private_or_auth_required"
+    return ""
 
 
 def _extract_via_tavily_once(url: str, api_url: str, api_key: str, timeout: int) -> ExtractionResponse:
@@ -60,6 +88,16 @@ def _extract_via_tavily_once(url: str, api_url: str, api_key: str, timeout: int)
 
     first = results[0]
     raw = first.get("raw_content") or ""
+    unavailable = _source_unavailable_reason(url, raw)
+    if unavailable:
+        return ExtractionResponse(
+            ok=False,
+            source_url=url,
+            engine="tavily_extract",
+            markdown=raw,
+            notes=[unavailable, "skip_fallback:source_unavailable"],
+            sources=[url],
+        )
     if not _is_content_usable(raw):
         return ExtractionResponse(
             ok=False,
@@ -220,6 +258,14 @@ def run_extract_pipeline(
     if plan.first_engine == "tavily":
         first = run_tavily_route()
         notes.extend(first.notes or [])
+        if any((note or "").startswith("source_unavailable:") for note in (first.notes or [])):
+            trace.add_event(
+                stage="extract.execute",
+                decision="fallback_skipped",
+                reason="source unavailable; avoid unnecessary mineru fallback",
+                metadata={"engine": "tavily_extract"},
+            )
+            return finalize(first)
         if first.ok or not plan.fallback_engine:
             return finalize(first)
         if plan.fallback_engine == "mineru":

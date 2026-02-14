@@ -34,6 +34,7 @@ codex-search explore "microsoft/graphrag" --confidence-profile quick --format js
 - `--book-max`：Book 论文上限
 - `--no-book-download`：只生成索引，不下载 PDF
 - `--no-artifacts`：不落盘产物
+- `--hard-fail-contract` / `--no-hard-fail-contract`：控制深度调查合同是否硬失败（默认硬失败）
 
 ---
 
@@ -77,6 +78,32 @@ codex-search explore "microsoft/graphrag" --confidence-profile quick --format js
 - `artifacts`：落盘目录与下载统计（`report.md/json` + `book/`）
 - `confidence.score` / `confidence.level` / `confidence.profile`
 - `confidence.factors[]`（含 weighted + raw 分）
+
+---
+
+## 深度调查合同（默认硬失败）
+
+当输出 `markdown` 时，默认检查以下配额，不满足即返回非 0：
+
+- 社区声量：`>= 6`
+- 竞品对比：`>= 4`
+- 反对证据：`>= 2`
+
+退出码约定：
+
+- `0`：成功且合同满足
+- `1`：运行失败（如仓库解析失败）
+- `2`：合同不满足（仅当 `--no-hard-fail-contract`）
+- `3`：合同不满足（默认硬失败）
+
+> Linux.do 等权限帖若不可访问，会标注 `source_unavailable:*` 并跳过，不做无限重试。
+
+---
+
+## 论文下载说明
+
+- `book.papers` 会收集 `arXiv` 以及直接 PDF 链接（不仅限 arXiv）。
+- 默认会下载到 `book/papers/`；可用 `--no-book-download` 关闭下载，仅保留索引。
 
 ---
 
