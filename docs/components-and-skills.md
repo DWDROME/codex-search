@@ -12,6 +12,7 @@
 | 组件 | 代码位置 | 职责 | CLI 入口 |
 |---|---|---|---|
 | Search Orchestrator | `src/codex_search_stack/search/` | 多源搜索编排、去重、意图评分、号池重试 | `codex-search search` |
+| Research Loop | `src/codex_search_stack/research/` | 多轮闭环（search→extract→critique→follow-up） | `codex-search research` |
 | Extract Pipeline | `src/codex_search_stack/extract/` | URL 提取，优先 Tavily，失败降级 MinerU | `codex-search extract` |
 | GitHub Explorer | `src/codex_search_stack/github_explorer/` | Repo/Issues/Commits/外部信号采集 + 置信度报告 | `codex-search explore` |
 | Smoke & CI Hook | `scripts/` + `.github/workflows/` | 本地回归、CI 自动化、脱敏环境快照 | `./scripts/smoke_phase6.sh` / `./scripts/ci_smoke_hook.sh` |
@@ -36,6 +37,7 @@
 | `content-extract` | `src/codex_search_stack/extract/pipeline.py` |
 | `mineru-extract` | `src/codex_search_stack/extract/mineru_adapter.py` |
 | `github-explorer` | `src/codex_search_stack/github_explorer/{orchestrator,report}.py` |
+| `git-workflow` | `skills/git-workflow/`（流程型 Skill，主要约束 Git 操作步骤与输出规范） |
 
 证据见：`docs/migration-map.md`
 

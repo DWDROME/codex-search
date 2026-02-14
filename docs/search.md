@@ -43,6 +43,7 @@ codex-search search "RAG framework comparison" --mode deep --intent exploratory 
 - `runtime.search_timeout_seconds`
 - `policy.models.grok.default/profiles`（模型档位路由）
 - `policy.routing.by_mode`（mode 默认 source mix）
+- `policy.search.grok.retry_attempts`（Grok 每个候选 key 的总尝试次数，默认 3）
 - `observability.decision_trace.enabled`（是否输出决策轨迹）
 
 ---
@@ -54,10 +55,13 @@ codex-search search "RAG framework comparison" --mode deep --intent exploratory 
    - `fast`：优先 Exa，其次 Grok
    - `deep`：并行 Exa + Tavily + Grok（按可用性）
    - `answer`：以 Tavily answer 能力为主
-3. Grok/Tavily 按 key pool 候选依次重试。
-4. URL 归一化去重；若配置了 `intent`，做意图感知评分后排序。
-5. 当设置 `budget-max-latency-ms` 时，会按启用 source 数量分摊为每源 timeout。
-6. 输出统一 JSON（`SearchResponse`），可选包含 `decision_trace`。
+3. Grok 为必选源：即使请求未显式包含，也会强制纳入路由；若失败按 `policy.search.grok.retry_attempts` 重试（默认 3 次总尝试）。
+4. Grok/Tavily 按 key pool 候选依次重试。
+5. URL 归一化去重；若配置了 `intent`，做意图感知评分后排序。
+6. 当设置 `budget-max-latency-ms` 时，会按启用 source 数量分摊为每源 timeout。
+7. 输出统一 JSON（`SearchResponse`），可选包含 `decision_trace`。
+
+默认情况下使用 `model_profile=strong`，可在请求级改为 `cheap/balanced` 以换取更低延迟。
 
 ---
 
@@ -66,3 +70,19 @@ codex-search search "RAG framework comparison" --mode deep --intent exploratory 
 - 没有结果：先确认至少有一个搜索源 key 可用，或 `search.key_pool.file` 存在且可读。
 - 结果质量一般：优先补 `--intent`，并加 `--domain-boost`。
 - 某源频繁失败：看返回 `notes`（如 `*_failed` / `*_pool_rotated`）定位具体源与 key。
+
+---
+
+## 进阶：Research 闭环
+
+当你需要“先搜一轮 -> 自动发现缺口 -> 继续追问补证”时，建议改用：
+
+```bash
+codex-search research "你的问题" --mode deep --intent exploratory --max-rounds 3
+```
+
+对应 skills 入口：
+
+```bash
+uv run python "skills/search-layer/scripts/research.py" "你的问题" --max-rounds 3
+```

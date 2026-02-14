@@ -1,9 +1,12 @@
 import json
 import sys
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from .config import load_settings, resolve_config_path
 from .github_explorer import render_markdown, run_github_explorer
+from .github_explorer.artifacts import attach_book_to_result, persist_explore_artifacts
+from .research import run_research_loop
 from .search.orchestrator import run_multi_source_search
 from .extract.pipeline import run_extract_pipeline
 from .validators import (
@@ -46,6 +49,9 @@ def _error_output(code: str, message: str, details: Optional[Dict] = None) -> st
     return _json_output(payload)
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 if FastMCP is not None:
     mcp = FastMCP("codex-search")
 
@@ -62,7 +68,7 @@ if FastMCP is not None:
         domain_boost: str = "",
         sources: str = "auto",
         model: str = "",
-        model_profile: str = "balanced",
+        model_profile: str = "strong",
         risk_level: str = "medium",
         budget_max_calls: int = 6,
         budget_max_tokens: int = 12000,
@@ -99,7 +105,7 @@ if FastMCP is not None:
             boost_domains=domains,
             sources=_split_sources(sources),
             model=(model or "").strip() or None,
-            model_profile=(model_profile or "balanced").strip().lower(),
+            model_profile=(model_profile or "strong").strip().lower(),
             risk_level=(risk_level or "medium").strip().lower(),
             budget_max_calls=max(1, max_calls),
             budget_max_tokens=max(1, max_tokens),
@@ -140,7 +146,7 @@ if FastMCP is not None:
 
     @mcp.tool(
         name="explore",
-        description="GitHub 项目解析与尽调，支持 JSON 或 Markdown 输出。",
+        description="GitHub 项目解析与尽调，支持 JSON/Markdown 输出，并可自动产出 report/book 资料包。",
     )
     def mcp_explore(
         target: str,
@@ -151,6 +157,10 @@ if FastMCP is not None:
         with_extract: bool = True,
         confidence_profile: str = "",
         output_format: str = "json",
+        with_artifacts: bool = True,
+        out_dir: str = "",
+        book_max: int = 5,
+        download_book: bool = True,
     ) -> str:
         err, normalized = validate_explore_protocol(
             issues=issues,
@@ -173,9 +183,81 @@ if FastMCP is not None:
             with_extract=with_extract,
             confidence_profile=(confidence_profile or settings.confidence_profile).strip().lower(),
         )
+        if result.get("ok"):
+            attach_book_to_result(result, settings=settings, max_items=max(0, coerce_int(book_max, 5)))
+
+        markdown_text = render_markdown(result)
+        artifacts = None
+        if with_artifacts:
+            artifacts = persist_explore_artifacts(
+                result=result,
+                markdown_text=markdown_text,
+                project_root=_PROJECT_ROOT,
+                out_dir=out_dir or "",
+                download_book=download_book,
+                timeout=max(10, int(getattr(settings, "extract_timeout_seconds", 30) or 30)),
+            )
+            result["artifacts"] = artifacts
+
         if str(normalized.get("output_format", "json")) == "markdown":
-            return render_markdown(result)
+            if artifacts:
+                markdown_text += "\n\n**📁 输出目录**\n\n"
+                markdown_text += "- %s\n" % artifacts.get("out_dir", "")
+                markdown_text += "- book_downloaded=%s\n" % artifacts.get("book_downloaded", 0)
+                markdown_text += "- book_download_failed=%s\n" % artifacts.get("book_download_failed", 0)
+            return markdown_text
         return _json_output(result)
+
+    @mcp.tool(
+        name="research",
+        description="多轮研究闭环（search -> extract -> critique -> follow-up），返回可追溯 JSON。",
+    )
+    def mcp_research(
+        query: str,
+        mode: str = "deep",
+        intent: str = "",
+        freshness: str = "",
+        num: int = 6,
+        domain_boost: str = "",
+        model_profile: str = "strong",
+        max_rounds: int = 3,
+        extract_per_round: int = 2,
+        extract_max_chars: int = 1600,
+        extract_strategy: str = "auto",
+    ) -> str:
+        normalized_intent = (intent or "").strip().lower()
+        normalized_freshness = (freshness or "").strip().lower()
+        normalized_mode = (mode or "deep").strip().lower()
+        normalized_num = coerce_int(num, 6)
+        domains = split_domain_boost(domain_boost)
+        err, details = validate_search_protocol(
+            queries=[query],
+            intent=normalized_intent,
+            freshness=normalized_freshness,
+            num=normalized_num,
+            domains=domains,
+            comparison_queries=1,
+            comparison_error_message="research tool expects single query; comparison use search-layer --queries",
+            time_signal_error_message="time-sensitive query requires freshness",
+        )
+        if err:
+            return _error_output(code="invalid_arguments", message=err, details=details)
+        settings = load_settings()
+        payload = run_research_loop(
+            query=query,
+            settings=settings,
+            mode=normalized_mode,
+            intent=normalized_intent or None,
+            freshness=normalized_freshness or None,
+            limit=max(1, normalized_num),
+            domain_boost=domains,
+            model_profile=(model_profile or "strong").strip().lower(),
+            max_rounds=max(1, coerce_int(max_rounds, 3)),
+            extract_per_round=max(0, coerce_int(extract_per_round, 2)),
+            extract_max_chars=max(200, coerce_int(extract_max_chars, 1600)),
+            extract_strategy=(extract_strategy or "auto").strip().lower(),
+        )
+        return _json_output(payload)
 
     @mcp.tool(
         name="get_config_info",

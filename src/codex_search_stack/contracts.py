@@ -20,7 +20,7 @@ class SearchRequest:
     boost_domains: List[str] = field(default_factory=list)
     sources: List[str] = field(default_factory=lambda: ["auto"])
     model: Optional[str] = None
-    model_profile: str = "balanced"
+    model_profile: str = "strong"
     risk_level: str = "medium"
     budget: SearchBudget = field(default_factory=SearchBudget)
 

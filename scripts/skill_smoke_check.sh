@@ -85,10 +85,18 @@ if name == "search-layer":
 elif name == "content-extract":
     assert payload.get("ok") is True, "content-extract: ok != true"
     assert payload.get("engine"), "content-extract: missing engine"
+elif name == "research-loop":
+    assert payload.get("ok") is True, "research-loop: ok != true"
+    assert int(payload.get("round_count", 0)) >= 1, "research-loop: round_count < 1"
+    assert isinstance(payload.get("results"), list), "research-loop: missing results"
 elif name == "github-explorer":
     assert payload.get("ok") is True, "github-explorer: ok != true"
     repo = payload.get("repo") or {}
     assert repo.get("full_name"), "github-explorer: missing repo full_name"
+elif name == "git-workflow":
+    assert payload.get("ok") is True, "git-workflow: ok != true"
+    assert payload.get("inside_worktree") is True, "git-workflow: not inside worktree"
+    assert payload.get("branch"), "git-workflow: missing branch"
 elif name == "mineru-extract":
     assert payload.get("ok") is True, "mineru-extract: ok != true"
     assert len(payload.get("items") or []) >= 1, "mineru-extract: no items"
@@ -122,8 +130,16 @@ run_json_step \
   run_uv python "$ROOT_DIR/skills/content-extract/scripts/content_extract.py" --url "https://platform.openai.com/docs/guides/tools-web-search" --max-chars 800
 
 run_json_step \
+  "research-loop" \
+  run_uv python "$ROOT_DIR/skills/search-layer/scripts/research.py" "OpenAI Codex 最新更新" --mode deep --intent status --freshness pw --num 3 --max-rounds 2 --extract-per-round 1
+
+run_json_step \
   "github-explorer" \
   run_uv python "$ROOT_DIR/skills/github-explorer/scripts/explore.py" "openai/codex" --format json --no-extract --issues 5 --commits 5 --external-num 3
+
+run_json_step \
+  "git-workflow" \
+  run_uv python "$ROOT_DIR/skills/git-workflow/scripts/git_snapshot.py" --repo "$ROOT_DIR"
 
 if [ -n "${MINERU_TOKEN:-}" ]; then
   run_json_step \

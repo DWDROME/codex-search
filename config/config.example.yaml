@@ -4,7 +4,7 @@ search:
   grok:
     api_url: "https://api.x.ai/v1"
     api_key: ""
-    model: "grok-4.1"
+    model: "grok-4.1-thinking"
   tavily:
     api_url: "https://api.tavily.com"
     api_key: ""
@@ -25,22 +25,25 @@ explore:
 
 runtime:
   confidence_profile: "deep"
-  search_timeout_seconds: 30
+  search_timeout_seconds: 60
   extract_timeout_seconds: 30
 
 policy:
   models:
     grok:
-      default: "grok-4.1"
+      default: "grok-4.1-thinking"
       profiles:
         cheap: "grok-4.1-fast"
-        balanced: "grok-4.1"
+        balanced: "grok-4.1-thinking"
         strong: "grok-4.1-thinking"
   routing:
     by_mode:
       fast: ["exa", "grok"]
       deep: ["exa", "tavily", "grok"]
       answer: ["tavily"]
+  search:
+    grok:
+      retry_attempts: 3
   extract:
     default_strategy: "auto"
     anti_bot_domains:
@@ -50,6 +53,13 @@ policy:
       - "mp.weixin.qq.com"
       - "www.xiaohongshu.com"
       - "xiaohongshu.com"
+  explore:
+    external:
+      model_profile: "strong"
+      timeout_seconds: 60
+      primary_sources: ["grok", "exa"]
+      fallback_source: "tavily"
+      followup_rounds: 2
 
 observability:
   decision_trace:

@@ -54,6 +54,7 @@
 - ✅ 意图感知参数（`intent` / `mode` / `freshness`）
 - ✅ 对比类并行检索（`--queries`）
 - ✅ 反爬提取自动回退（`auto -> mineru_only`）
+- ✅ Git 提交流程 Skill（状态快照 + 提交/PR 规范化流程）
 - ✅ MCP 协议层参数校验（`invalid_arguments` 统一错误合同）
 - ✅ YAML 单入口配置（避免 env 与配置文件双入口混乱）
 - ✅ 决策轨迹与统计（`decision_trace` + 聚合脚本）
@@ -75,7 +76,7 @@ cp "config/config.example.yaml" "config/config.yaml"
 export CODEX_SEARCH_CONFIG="$PWD/config/config.yaml"
 ```
 
-最小配置示例：
+配置示例（含 GitHub Explorer）：
 
 ```yaml
 search:
@@ -87,10 +88,27 @@ search:
   grok:
     api_url: "https://api.x.ai/v1"
     api_key: ""
+    model: "grok-4.1-thinking"
 extract:
   mineru:
     token: ""
+explore:
+  github_token: ""
+runtime:
+  search_timeout_seconds: 60
+policy:
+  search:
+    grok:
+      retry_attempts: 3
+  explore:
+    external:
+      model_profile: "strong"
+      primary_sources: ["grok", "exa"]
+      fallback_source: "tavily"
+      followup_rounds: 2
 ```
+
+> `explore.github_token` 推荐填写 GitHub Personal Access Token（用于提升 GitHub API 限额与稳定性）。
 
 ### Step 2. 安装 Skills（推荐主路径）
 
@@ -148,6 +166,7 @@ codex mcp get "codex-search"
    - `skills/content-extract/SKILL.md`
    - `skills/mineru-extract/SKILL.md`
    - `skills/github-explorer/SKILL.md`
+   - `skills/git-workflow/SKILL.md`
 2. 若 Skills 不可用或需要标准化工具接口，再使用 MCP：
    - `search`
    - `extract`
@@ -188,7 +207,7 @@ codex mcp get "codex-search"
 - GitHub 调研用 github-explorer
 
 只有在 Skills 不可用或需要标准化接口时，才使用 MCP 工具：
-search / extract / explore / get_config_info
+search / extract / explore / research / get_config_info
 
 输出必须附来源 URL；时效信息必须标日期；失败必须重试并说明策略调整。
 ```
@@ -214,6 +233,13 @@ uv run python "skills/search-layer/scripts/search.py" \
   --mode deep --intent comparison --num 5
 ```
 
+### 3) 多轮研究闭环（自动追问补证）
+
+```bash
+uv run python "skills/search-layer/scripts/research.py" "FAST-LIVO2 架构风险与论文证据" \
+  --mode deep --intent exploratory --max-rounds 3 --extract-per-round 2
+```
+
 ### 3) 普通网页提取
 
 ```bash
@@ -235,6 +261,93 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
   --issues 8 --commits 8 --external-num 10 --extract-top 3 --format markdown
 ```
 
+### 6) Git 工作流快照
+
+```bash
+uv run python "skills/git-workflow/scripts/git_snapshot.py" --repo "."
+```
+
+---
+
+## GitHub Explorer（项目尽调）
+
+`github-explorer` 适合一句话任务：`帮我看看 xxx 项目`。  
+它会先做仓库定位，再聚合 GitHub 主证据与外部信号，最后输出结构化结论。
+
+### 你会得到什么
+
+- 仓库基础画像：Stars/Forks/License/最近活跃度/README 摘要
+- Issue 风险清单：按质量排序（评论热度 + maintainer 参与 + 风险标签）
+- 最近提交脉络：近 N 条 commit 概览
+- 外部信号与收录：社区信息 + DeepWiki/arXiv/zread 状态
+- 竞品候选：同赛道 alternatives / compare 证据链接
+- 主观建议：适用场景、风险与下一步动作
+
+### 快速命令
+
+```bash
+# 快速扫仓（低成本）
+uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
+  --issues 5 --commits 5 --external-num 6 --no-extract --format markdown
+
+# 深度尽调（推荐）
+uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
+  --issues 8 --commits 8 --external-num 10 --extract-top 3 --confidence-profile deep --format markdown
+```
+
+### 输入与输出
+
+- 输入：`target`（URL / `owner/repo` / 项目关键词）
+- 输出：
+  - `markdown`：可读报告（适合直接给人看）
+  - `json`：结构化字段（适合集成自动化流程）
+
+`json` 关键字段：
+
+- `repo`（含 `readme_excerpt`）
+- `issues`（含 `quality_score` / `maintainer_participated` / `risk_tags`）
+- `commits`
+- `external`
+- `comparisons`
+- `index_coverage`（`deepwiki/arxiv/zread`）
+- `confidence`
+
+### 典型场景
+
+- “帮我看看 `openai/codex` 值不值得跟进”
+- “调研 `facebookresearch/segment-anything` 的真实风险和替代方案”
+- “给我一个可追溯来源的 GitHub 选型报告”
+
+### 真实示例：FAST-LIVO2（含论文下载）
+
+```bash
+uv run python "skills/github-explorer/scripts/explore.py" \
+  "https://github.com/hku-mars/FAST-LIVO2" \
+  --issues 8 --commits 8 --external-num 12 \
+  --extract-top 0 --no-extract \
+  --book-max 5 --out-dir ".runtime/demo-fast-livo2" \
+  --format markdown
+```
+
+典型输出特征（节选）：
+
+- `🧭 收录与索引`：`DeepWiki: found`、`arXiv: found`
+- `📚 Book 资料包`：列出 arXiv 论文，并包含 `pdf` 链接
+- `📁 输出目录`：显示 `book_downloaded` 与 `book_download_failed`
+
+落盘目录示例：
+
+```text
+.runtime/demo-fast-livo2/
+├── report.md
+├── report.json
+└── book/
+    ├── README.md
+    └── papers/
+        ├── FAST-LIVO2_*.pdf
+        └── *.pdf
+```
+
 ---
 
 ## 详细项目介绍
@@ -247,10 +360,11 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
 | `content-extract` | URL 到 Markdown 的统一入口，自动策略与回退 |
 | `mineru-extract` | MinerU API 封装（反爬/复杂文档兜底） |
 | `github-explorer` | GitHub 项目结构化解析与尽调 |
+| `git-workflow` | Git 提交流程助手（快照、提交规范、PR 流程模板） |
 
 ### MCP 工具说明
 
-本项目提供四个 MCP 工具：
+本项目提供五个 MCP 工具：
 
 #### `search` - 多源搜索
 
@@ -263,9 +377,11 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
 | `num` | int | ❌ | `5` | 返回结果数（协议校验范围 `1..20`） |
 | `domain_boost` | string | ❌ | `""` | 域名加权（逗号分隔） |
 | `sources` | string | ❌ | `auto` | 指定源组合 |
-| `model` / `model_profile` | string | ❌ | `""` / `balanced` | 请求级模型选择 |
+| `model` / `model_profile` | string | ❌ | `""` / `strong` | 请求级模型选择 |
 | `risk_level` | string | ❌ | `medium` | 风险等级 |
 | `budget_*` | int | ❌ | 内置默认 | 调用预算与延迟预算 |
+
+> Grok 已设为必选源：若本轮 Grok 请求失败，会自动重试；次数由 `policy.search.grok.retry_attempts` 控制（默认 3 次尝试）。
 
 <details>
 <summary><b>返回示例</b>（点击展开）</summary>
@@ -337,6 +453,28 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
 | `with_extract` | bool | ❌ | `true` | 是否启用外链提取 |
 | `confidence_profile` | string | ❌ | 读配置 | `deep/quick` 置信度策略 |
 | `output_format` | string | ❌ | `json` | `json/markdown` |
+| `with_artifacts` | bool | ❌ | `true` | 是否落盘 `report/book` 资料包 |
+| `out_dir` | string | ❌ | `""` | 指定输出目录（默认 `".runtime/github-explorer/<repo>_<time>/"`） |
+| `book_max` | int | ❌ | `5` | Book 收录论文上限（会补探测 arXiv） |
+| `download_book` | bool | ❌ | `true` | 是否下载论文 PDF 到 `book/papers/` |
+
+#### `research` - 多轮研究闭环
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `query` | string | ✅ | - | 研究主题（单查询入口） |
+| `mode` | string | ❌ | `deep` | `fast/deep/answer` |
+| `intent` | string | ❌ | `""` | 同 `search` 意图枚举 |
+| `freshness` | string | ❌ | `""` | `pd/pw/pm/py` |
+| `num` | int | ❌ | `6` | 每轮保留结果上限 |
+| `domain_boost` | string | ❌ | `""` | 域名加权 |
+| `model_profile` | string | ❌ | `strong` | `cheap/balanced/strong` |
+| `max_rounds` | int | ❌ | `3` | 最大追问轮数 |
+| `extract_per_round` | int | ❌ | `2` | 每轮抓取条数 |
+| `extract_max_chars` | int | ❌ | `1600` | 抽取截断长度 |
+| `extract_strategy` | string | ❌ | `auto` | 提取策略（同 extract） |
+
+返回包含 `rounds/results/notes/decision_trace`，可直接回放“为什么继续追问、为什么停止”。
 
 #### `get_config_info` - 配置体检
 
@@ -355,7 +493,7 @@ uv run python "skills/github-explorer/scripts/explore.py" "openai/codex" \
 ```text
 src/codex_search_stack/
 ├── config.py               # 配置加载（YAML 单入口）
-├── mcp_server.py           # MCP 服务入口（4 tools）
+├── mcp_server.py           # MCP 服务入口（5 tools）
 ├── validators.py           # 协议参数校验
 ├── key_pool.py             # Grok/Tavily key pool
 ├── policy/
@@ -371,7 +509,10 @@ src/codex_search_stack/
 │   └── mineru_adapter.py   # MinerU 适配
 ├── github_explorer/
 │   ├── orchestrator.py     # 尽调编排
-│   └── report.py           # 报告渲染
+│   ├── report.py           # 报告渲染
+│   └── artifacts.py        # book 收集与产物落盘
+├── research/
+│   └── orchestrator.py     # 多轮 research 闭环
 └── observability/
     └── decision_trace_store.py  # 决策轨迹落盘与统计
 ```
@@ -389,9 +530,9 @@ A：先跑 `uv run python "scripts/check_api_config.py"`；重点看 `search` re
 A：`strategy=auto` 下命中高阻域名会自动路由 `mineru_only`，这是预期行为。
 
 **Q3：如何验证 MCP 是否真的可用？**  
-A：先 `codex mcp get "codex-search"`，再调用 `get_config_info`、`search`、`extract`、`explore` 逐项 smoke。
+A：先 `codex mcp get "codex-search"`，再调用 `get_config_info`、`search`、`extract`、`explore`、`research` 逐项 smoke。
 
-**asdfadsfsdaQ4：为什么 comparison 在 MCP 报参数错误？**  
+**Q4：为什么 comparison 在 MCP 报参数错误？**  
 A：MCP 单查询入口不支持 comparison 多查询流程；请改用 skill `search.py --queries ...`。
 
 ---
@@ -413,6 +554,7 @@ A：MCP 单查询入口不支持 comparison 多查询流程；请改用 skill `s
 - `skills/README.md`
 - `docs/configuration.md`
 - `docs/search.md`
+- `docs/research.md`
 - `docs/extract.md`
 - `docs/explore.md`
 - `docs/mcp.md`

@@ -6,6 +6,7 @@ from .config import load_settings
 from .extract.pipeline import run_extract_pipeline
 from .github_explorer import render_markdown, run_github_explorer
 from .observability import aggregate_decision_trace_jsonl
+from .research import run_research_loop
 from .search.orchestrator import run_multi_source_search
 
 
@@ -34,7 +35,7 @@ def main() -> int:
     search.add_argument("--domain-boost", default="")
     search.add_argument("--sources", default="auto", help="auto 或 exa,tavily,grok")
     search.add_argument("--model", default="", help="请求级显式模型，优先级高于 profile")
-    search.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="balanced")
+    search.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong")
     search.add_argument("--risk-level", choices=["low", "medium", "high"], default="medium")
     search.add_argument("--budget-max-calls", type=int, default=6)
     search.add_argument("--budget-max-tokens", type=int, default=12000)
@@ -59,6 +60,26 @@ def main() -> int:
     explore.add_argument("--no-extract", action="store_true")
     explore.add_argument("--confidence-profile", choices=["deep", "quick"])
     explore.add_argument("--format", choices=["markdown", "json"], default="markdown")
+
+    research = sub.add_parser("research", help="Run multi-round research loop")
+    research.add_argument("query")
+    research.add_argument("--mode", choices=["fast", "deep", "answer"], default="deep")
+    research.add_argument(
+        "--intent",
+        choices=["factual", "status", "comparison", "tutorial", "exploratory", "news", "resource"],
+    )
+    research.add_argument("--freshness", choices=["pd", "pw", "pm", "py"])
+    research.add_argument("--num", type=int, default=6)
+    research.add_argument("--domain-boost", default="")
+    research.add_argument("--model-profile", choices=["cheap", "balanced", "strong"], default="strong")
+    research.add_argument("--max-rounds", type=int, default=3)
+    research.add_argument("--extract-per-round", type=int, default=2)
+    research.add_argument("--extract-max-chars", type=int, default=1600)
+    research.add_argument(
+        "--extract-strategy",
+        choices=["auto", "tavily_first", "mineru_first", "tavily_only", "mineru_only"],
+        default="auto",
+    )
 
     trace_stats = sub.add_parser("trace-stats", help="Aggregate persisted DecisionTrace JSONL")
     trace_stats.add_argument("--path", default="", help="DecisionTrace JSONL path (default from config)")
@@ -114,6 +135,24 @@ def main() -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(render_markdown(result))
+        return 0
+
+    if args.command == "research":
+        result = run_research_loop(
+            query=args.query,
+            settings=settings,
+            mode=args.mode,
+            intent=args.intent,
+            freshness=args.freshness,
+            limit=max(args.num, 1),
+            domain_boost=_split_domains(args.domain_boost),
+            model_profile=args.model_profile,
+            max_rounds=max(1, int(args.max_rounds)),
+            extract_per_round=max(0, int(args.extract_per_round)),
+            extract_max_chars=max(200, int(args.extract_max_chars)),
+            extract_strategy=args.extract_strategy,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "trace-stats":

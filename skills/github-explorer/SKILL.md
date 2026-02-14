@@ -2,47 +2,47 @@
 name: github-explorer
 description: >
   GitHub 项目深度分析 Skill。用于“帮我看看这个仓库/这个项目怎么样/值不值得用”类请求。
-  按固定流程完成仓库定位、多源证据采集、结构化研判与可追溯输出。
+  采用证据优先流程：仓库定位 -> GitHub API 主证据 -> 外部信号补证 -> 结构化结论，避免只读 README。
 ---
 
-# github-explorer（Codex 版）
+# GitHub Explorer（Codex 版）
 
-> 原则：不只看 README；重点看 Issues、Commits、外部讨论与可验证证据。
+> 核心原则：README 只算入口，结论必须落在 Issues / Commits / 外部可追溯链接。
 
-## 触发时机
+## Workflow
 
-出现以下意图时，优先使用本 Skill：
+```text
+[项目名/URL]
+  -> [1. 定位仓库]
+  -> [2. 采集证据（主证据 + 外部补证）]
+  -> [3. 研判打分]
+  -> [4. 结构化输出 + 自检]
+```
 
-- “分析一下这个 GitHub 项目”
-- “这个仓库靠谱吗/值不值得用”
-- “帮我做竞品对比/项目尽调”
-- “给我一个结构化项目评估报告”
+## Phase 1：定位仓库（必须）
 
-## 标准流程（必须按序执行）
+1. 优先输入 `owner/repo` 或完整 GitHub URL。
+2. 若只有项目名：先用 `search-layer` 找候选，再确认主仓。
+3. 同名冲突必须写入 `notes`，禁止拍脑袋选仓库。
 
-### Phase 1：定位仓库
+仓库定位命令（候选检索）：
 
-1. 优先识别 `owner/repo` 或 GitHub URL。
-2. 若只有项目名：
-   - 先用 `search-layer` 定位候选仓库，再确认主仓。
-3. 记录候选冲突（同名仓库）并在 `notes` 标注。
+```bash
+uv run python "skills/search-layer/scripts/search.py" \
+  "site:github.com <project_name>" --mode deep --intent resource --num 5
+```
 
-### Phase 2：采集证据（并行）
+## Phase 2：采集证据（并行）
 
-1. 主证据（必选）：
-   - Repo 元数据、Issues、Commits（由内核 `explore` 完成）
-2. 外部证据（按需）：
-   - 技术评测/新闻/社区讨论：调用 `search-layer`
-3. 反爬页面（知乎/微信/小红书等）：
-   - 调 `content-extract`，必要时自动降级 `mineru-extract`
+### 2.1 主证据（必须）
 
-推荐命令：
+必须走本仓 `github-explorer` 脚本（内部已使用 GitHub API，不依赖 repo 页面抓取）：
 
 ```bash
 uv run python "skills/github-explorer/scripts/explore.py" "owner/repo" --format markdown
 ```
 
-深度尽调：
+深度尽调建议：
 
 ```bash
 uv run python "skills/github-explorer/scripts/explore.py" "owner/repo" \
@@ -50,74 +50,99 @@ uv run python "skills/github-explorer/scripts/explore.py" "owner/repo" \
   --confidence-profile deep --format markdown
 ```
 
-外部补证（示例）：
+产物落盘（默认开启）：
+
+- 每次执行会在 `".runtime/github-explorer/<repo>_<time>/"` 输出：
+  - `report.md`
+  - `report.json`
+  - `book/README.md`
+  - `book/papers/*.pdf`（若命中 arXiv 且下载成功）
+- 可用 `--out-dir` 指定目录，`--no-book-download` 仅生成索引不下载 PDF。
+
+### 2.2 外部补证（按需）
+
+默认会优先注入 DeepWiki（若存在 `https://deepwiki.com/{owner}/{repo}`），并并行检查 `arXiv`、`zread` 收录状态；DeepWiki 不可用时自动降级，不中断主流程。
+
+当需要社区观点/实测反馈/竞品讨论时（知乎/公众号/V2EX/Twitter + alternatives）：
 
 ```bash
 uv run python "skills/search-layer/scripts/search.py" \
-  --queries "<project> review" "<project> discussion" \
+  --queries "<owner/repo> review" "<owner/repo> 使用体验" "<owner/repo> alternatives" \
   --mode deep --intent exploratory --num 5
 ```
 
-### Phase 3：研判
+### 2.3 反爬站点降级（强制）
 
-至少回答以下问题：
+遇到知乎/微信/小红书或 `web` 抽取不完整时：
 
-1. 项目处于哪个阶段（快速成长/成熟稳定/维护模式）？
-2. Top Issues 暴露了什么真实风险？
-3. 与主流替代方案差异在哪？
-4. 哪些场景适合用，哪些不适合？
+```bash
+uv run python "skills/content-extract/scripts/content_extract.py" --url "<url>"
+```
 
-### Phase 4：结构化输出
+必要时强制 MinerU：
 
-- 默认按 `references/report-template.md` 输出。
-- 每个结论都要有来源链接或仓库证据。
-- 找不到信息时明确写“未找到”，不得编造。
+```bash
+uv run python "skills/content-extract/scripts/content_extract.py" --url "<url>" --force-mineru
+```
 
-## 精选 Issue 评分标准（强制）
+## Phase 3：研判规则（必须回答）
 
-从候选 Issues 中选 Top 3-5，按以下规则打分并优先展示：
+至少回答以下 4 点：
 
-- `讨论热度`（0-3）：评论数、参与者多样性
-- `维护者参与`（0-3）：是否有 maintainer/core contributor 明确回应
-- `风险价值`（0-2）：是否涉及架构缺陷、稳定性、数据安全、性能瓶颈
-- `可执行性`（0-2）：是否有复现、修复方案、里程碑或关闭结论
+1. 项目阶段：快速迭代 / 稳定活跃 / 维护模式 / 低活跃
+2. 真实风险：精选 Issues 暴露了什么（稳定性、性能、兼容性、维护成本）
+   - 必须明确 maintainer 是否参与评论（`OWNER/MEMBER/COLLABORATOR`）
+3. 适用边界：适合什么团队/场景，不适合什么场景
+4. 采用建议：直接采用 / PoC 后采用 / 暂缓
 
-总分 `0-10`，优先展示总分高者；同分时优先近期（最近 90 天）且已形成结论的问题。
+### 精选 Issue 评分（建议）
 
-每条 Issue 输出格式必须是：
+每条 Issue 可按 0-10 粗评分：
 
-- `[#编号 标题](URL) — 争议点 / 维护者结论 / 当前状态`
+- 讨论热度（0-3）
+- 维护者参与（0-3）
+- 风险价值（0-2）
+- 可执行性（0-2）
 
-## 社区声量引用格式（强制）
+优先展示高分 + 最近 90 天有进展的问题。
 
-社区信息必须“可追溯 + 有观点”，统一格式：
+## Phase 4：输出合同（强制）
 
-- `[平台: 标题](URL)（YYYY-MM-DD）— 具体观点/实测结论`
+输出必须满足：
 
-约束：
+- 顶部可点击仓库标题：`# [owner/repo](URL)`
+- 包含：一句话定位 / 健康度 / 精选 Issue / 最近提交 / 外部信号 / 结论建议
+- 每条外部观点必须有 URL；时间敏感信息带日期
+- 信息缺失写“未找到”，禁止编造
 
-- 不允许只有“热度高/评价不错”这类空话
-- 至少给出 2 条外部引用；不足时写“未找到更多可验证讨论”
-- 优先引用一手讨论（作者帖、Issue、论坛原帖），避免二手搬运
+模板参考：`references/report-template.md`
 
-## 输出质量红线（强制）
+## 快速参数矩阵
 
-- 必须有可点击仓库标题链接：`# [name](url)`
-- 必须包含精选 Issue（有链接）
-- 竞品必须附链接
-- 外部观点必须附来源 URL 与日期
-- 禁止空话（如“热度很高”）但无证据
+| 目标 | 推荐参数 |
+|---|---|
+| 快速扫仓 | `--issues 5 --commits 5 --external-num 5 --no-extract` |
+| 深度尽调 | `--issues 8 --commits 8 --external-num 10 --extract-top 3` |
+| 低成本巡检 | `--confidence-profile quick --no-extract` |
+| 证据优先 | `--confidence-profile deep --extract-top 3` |
 
-## 降级策略
+## 失败与降级
 
-- 外部搜索源失败：保留 GitHub 主证据并在 `notes` 记录失败源。
-- 反爬内容抓取失败：切换 `content-extract` / `mineru-extract`。
-- 目标无法解析：要求用户提供明确 `owner/repo`。
+- 仓库无法解析：要求用户提供明确 `owner/repo`
+- 外部信号不足：保留 GitHub 主证据并在 `notes` 标注
+- 外链抓取失败：切换 `content-extract` / `--force-mineru`
+
+## 输出前自检清单（强制）
+
+- [ ] 仓库链接可点击且正确
+- [ ] 至少 3 条最近提交
+- [ ] 至少 1 条精选 Issue（若无则写明）
+- [ ] 外部信号有可追溯 URL（若无则写明）
+- [ ] 结论包含“适用场景 + 风险 + 建议动作”
 
 ## 依赖关系
 
-- `search-layer`：多源搜索与排序
-- `content-extract`：网页正文提取
-- `mineru-extract`：反爬/复杂页面兜底
-
-> 注意：本 Skill 为编排协议层；底层能力由 `src/codex_search_stack/github_explorer/` 与相关组件提供。
+- `skills/search-layer`：外部检索与补证
+- `skills/content-extract`：正文提取
+- `skills/mineru-extract`：反爬兜底
+- `src/codex_search_stack/github_explorer/`：主编排与报告渲染
